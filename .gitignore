@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 .env
 *.csv
+!media_bias_ratings.csv
 *.json
 !requirements.txt
 .DS_Store

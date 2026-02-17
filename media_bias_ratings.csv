@@ -1,0 +1,247 @@
+domain,rating,label,source,category
+# ══════════════════════════════════════════════════════════════
+# LEFT (-2)
+# Source: AllSides v11 (Dec 2025), MBFC
+# ══════════════════════════════════════════════════════════════
+alternet.org,-2,Left,AllSides,US News
+commondreams.org,-2,Left,AllSides,US News
+currentaffairs.org,-2,Left,AllSides,US News
+dailykos.com,-2,Left,AllSides,US News
+democracynow.org,-2,Left,AllSides,US News
+huffpost.com,-2,Left,AllSides,US News
+huffingtonpost.com,-2,Left,AllSides,US News
+jacobin.com,-2,Left,AllSides,US News
+motherjones.com,-2,Left,AllSides,US News
+msnbc.com,-2,Left,AllSides,US News
+newrepublic.com,-2,Left,AllSides,US News
+rawstory.com,-2,Left,AllSides,US News
+salon.com,-2,Left,AllSides,US News
+slate.com,-2,Left,AllSides,US News
+thedailybeast.com,-2,Left,AllSides v11,US News
+thenation.com,-2,Left,AllSides,US News
+theintercept.com,-2,Left,AllSides,US News
+truthout.org,-2,Left,AllSides,US News
+vox.com,-2,Left,AllSides,US News
+thinkprogress.org,-2,Left,MBFC,US News
+crooksandliars.com,-2,Left,MBFC,US News
+shareblue.com,-2,Left,MBFC,US News
+occupydemocrats.com,-2,Left,MBFC,US News
+dailybeast.com,-2,Left,AllSides v11,US News
+theatlantic.com,-2,Left,AllSides v11,US News
+apnews.com,-2,Left,AllSides v11,US News
+# ══════════════════════════════════════════════════════════════
+# LEAN LEFT (-1)
+# Source: AllSides v11 (Dec 2025), MBFC
+# ══════════════════════════════════════════════════════════════
+abcnews.go.com,-1,Lean Left,AllSides,US News
+abc.net.au,-1,Lean Left,MBFC,Australian News
+axios.com,-1,Lean Left,AllSides,US News
+bbc.com,-1,Lean Left,AllSides,UK News
+bbc.co.uk,-1,Lean Left,AllSides,UK News
+bloomberg.com,-1,Lean Left,AllSides,US News
+businessinsider.com,-1,Lean Left,AllSides,US News
+cbsnews.com,-1,Lean Left,AllSides,US News
+cnn.com,-1,Lean Left,AllSides,US News
+economist.com,-1,Lean Left,AllSides,UK News
+foreignaffairs.com,-1,Lean Left,AllSides,US News
+ft.com,-1,Lean Left,AllSides,UK News
+insider.com,-1,Lean Left,AllSides,US News
+latimes.com,-1,Lean Left,AllSides,US News
+nbcnews.com,-1,Lean Left,AllSides,US News
+newyorker.com,-1,Lean Left,AllSides,US News
+nytimes.com,-1,Lean Left,AllSides,US News
+npr.org,-1,Lean Left,AllSides,US News
+pbs.org,-1,Lean Left,AllSides,US News
+politico.com,-1,Lean Left,AllSides,US News
+propublica.org,-1,Lean Left,AllSides,US News
+scientificamerican.com,-1,Lean Left,AllSides,US News
+theconversation.com,-1,Lean Left,AllSides,International
+theguardian.com,-1,Lean Left,AllSides,UK News
+theverge.com,-1,Lean Left,AllSides,US News
+time.com,-1,Lean Left,AllSides,US News
+usatoday.com,-1,Lean Left,AllSides,US News
+vice.com,-1,Lean Left,AllSides,US News
+washingtonpost.com,-1,Lean Left,AllSides,US News
+wired.com,-1,Lean Left,AllSides,US News
+cnbc.com,-1,Lean Left,AllSides v11,US News
+thedailybeast.com,-1,Lean Left,AllSides,US News
+buzzfeednews.com,-1,Lean Left,MBFC,US News
+mashable.com,-1,Lean Left,MBFC,US News
+rollingstone.com,-1,Lean Left,MBFC,US News
+vanityfair.com,-1,Lean Left,MBFC,US News
+vogue.com,-1,Lean Left,MBFC,US News
+teenvogue.com,-1,Lean Left,MBFC,US News
+gizmodo.com,-1,Lean Left,MBFC,US News
+talkingpointsmemo.com,-1,Lean Left,MBFC,US News
+mediamatters.org,-1,Lean Left,MBFC,US News
+thehill.com,-1,Lean Left,MBFC,US News
+aljazeera.com,-1,Lean Left,MBFC,International
+cbc.ca,-1,Lean Left,MBFC,Canadian News
+dw.com,-1,Lean Left,MBFC,German News
+independent.co.uk,-1,Lean Left,MBFC,UK News
+irishtimes.com,-1,Lean Left,MBFC,Irish News
+haaretz.com,-1,Lean Left,MBFC,Israeli News
+nzherald.co.nz,-1,Lean Left,MBFC,NZ News
+smh.com.au,-1,Lean Left,MBFC,Australian News
+theage.com.au,-1,Lean Left,MBFC,Australian News
+globalnews.ca,-1,Lean Left,MBFC,Canadian News
+theglobeandmail.com,-1,Lean Left,MBFC,Canadian News
+macleans.ca,-1,Lean Left,MBFC,Canadian News
+thestar.com,-1,Lean Left,MBFC,Canadian News
+# Indian Lean Left
+ndtv.com,-1,Lean Left,MBFC (pre-2022),Indian News
+thehindu.com,-1,Lean Left,MBFC,Indian News
+scroll.in,-1,Lean Left,MBFC,Indian News
+thewire.in,-1,Lean Left,MBFC,Indian News
+thenewsminute.com,-1,Lean Left,MBFC,Indian News
+firstpost.com,-1,Lean Left,MBFC,Indian News
+newslaundry.com,-1,Lean Left,MBFC,Indian News
+caravanmagazine.in,-1,Lean Left,MBFC,Indian News
+# ══════════════════════════════════════════════════════════════
+# CENTER (0)
+# Source: AllSides v11 (Dec 2025), MBFC, Academic/Institutional
+# ══════════════════════════════════════════════════════════════
+reuters.com,0,Center,AllSides v11,Wire Service
+c-span.org,0,Center,AllSides,US News
+allsides.com,0,Center,AllSides,US News
+csmonitor.com,0,Center,AllSides,US News
+factcheck.org,0,Center,AllSides,Fact Check
+marketwatch.com,0,Center,AllSides,US News
+newsweek.com,0,Center,AllSides,US News
+politifact.com,0,Center,AllSides,Fact Check
+realclearpolitics.com,0,Center,AllSides,US News
+snopes.com,0,Center,AllSides,Fact Check
+cfr.org,0,Center,AllSides,Think Tank
+newsnation.com,0,Center,AllSides v11,US News
+1440.com,0,Center,AllSides v11,Newsletter
+tangle.media,0,Center,AllSides v11,Newsletter
+morningbrew.com,0,Center,AllSides v11,Newsletter
+straightarrownews.com,0,Center,AllSides v11,US News
+wsj.com,0,Center,AllSides v11,US News
+france24.com,0,Center,MBFC,French News
+skynews.com,0,Center,MBFC,UK News
+theaustralian.com.au,0,Center,MBFC,Australian News
+# Indian Center
+indiatoday.in,0,Center,MBFC,Indian News
+hindustantimes.com,0,Center,MBFC,Indian News
+indianexpress.com,0,Center,MBFC,Indian News
+livemint.com,0,Center,MBFC,Indian News
+theprint.in,0,Center,MBFC,Indian News
+deccanherald.com,0,Center,MBFC,Indian News
+timesofindia.indiatimes.com,0,Center,MBFC,Indian News
+# International Center
+scmp.com,0,Center,MBFC,Hong Kong News
+straitstimes.com,0,Center,MBFC,Singapore News
+japantimes.co.jp,0,Center,MBFC,Japanese News
+koreaherald.com,0,Center,MBFC,Korean News
+channelnewsasia.com,0,Center,MBFC,Singapore News
+# Academic / Institutional / Scientific (rated Center — peer-reviewed or governmental)
+nature.com,0,Center,Institutional,Academic
+science.org,0,Center,Institutional,Academic
+sciencedirect.com,0,Center,Institutional,Academic
+thelancet.com,0,Center,Institutional,Academic
+bmj.com,0,Center,Institutional,Academic
+nejm.org,0,Center,Institutional,Academic
+who.int,0,Center,Institutional,Governmental
+cdc.gov,0,Center,Institutional,Governmental
+nih.gov,0,Center,Institutional,Governmental
+ncbi.nlm.nih.gov,0,Center,Institutional,Academic
+pubmed.ncbi.nlm.nih.gov,0,Center,Institutional,Academic
+doi.org,0,Center,Institutional,Academic
+jstor.org,0,Center,Institutional,Academic
+springer.com,0,Center,Institutional,Academic
+wiley.com,0,Center,Institutional,Academic
+tandfonline.com,0,Center,Institutional,Academic
+cambridge.org,0,Center,Institutional,Academic
+oxford.com,0,Center,Institutional,Academic
+oxfordjournals.org,0,Center,Institutional,Academic
+arxiv.org,0,Center,Institutional,Academic
+un.org,0,Center,Institutional,Governmental
+worldbank.org,0,Center,Institutional,Governmental
+imf.org,0,Center,Institutional,Governmental
+britannica.com,0,Center,Institutional,Reference
+loc.gov,0,Center,Institutional,Governmental
+congress.gov,0,Center,Institutional,Governmental
+supremecourt.gov,0,Center,Institutional,Governmental
+europarl.europa.eu,0,Center,Institutional,Governmental
+europa.eu,0,Center,Institutional,Governmental
+pnas.org,0,Center,Institutional,Academic
+cell.com,0,Center,Institutional,Academic
+apa.org,0,Center,Institutional,Academic
+ieee.org,0,Center,Institutional,Academic
+acm.org,0,Center,Institutional,Academic
+ssrn.com,0,Center,Institutional,Academic
+scholar.google.com,0,Center,Institutional,Academic
+researchgate.net,0,Center,Institutional,Academic
+frontiersin.org,0,Center,Institutional,Academic
+plos.org,0,Center,Institutional,Academic
+biorxiv.org,0,Center,Institutional,Academic
+medrxiv.org,0,Center,Institutional,Academic
+cochranelibrary.com,0,Center,Institutional,Academic
+cochrane.org,0,Center,Institutional,Academic
+nasa.gov,0,Center,Institutional,Governmental
+noaa.gov,0,Center,Institutional,Governmental
+epa.gov,0,Center,Institutional,Governmental
+fda.gov,0,Center,Institutional,Governmental
+census.gov,0,Center,Institutional,Governmental
+bls.gov,0,Center,Institutional,Governmental
+pewresearch.org,0,Center,Institutional,Research
+gallup.com,0,Center,Institutional,Research
+brookings.edu,0,Center,MBFC,Think Tank
+rand.org,0,Center,MBFC,Think Tank
+# ══════════════════════════════════════════════════════════════
+# LEAN RIGHT (+1)
+# Source: AllSides v11 (Dec 2025), MBFC
+# ══════════════════════════════════════════════════════════════
+foxbusiness.com,1,Lean Right,AllSides,US News
+nypost.com,1,Lean Right,AllSides,US News
+washingtontimes.com,1,Lean Right,AllSides,US News
+reason.com,1,Lean Right,AllSides,US News
+nationalreview.com,1,Lean Right,AllSides,US News
+forbes.com,1,Lean Right,AllSides,US News
+washingtonexaminer.com,1,Lean Right,AllSides,US News
+freebeacon.com,1,Lean Right,AllSides,US News
+thedispatch.com,1,Lean Right,AllSides,US News
+epochtimes.com,1,Lean Right,AllSides v11,US News
+zerohedge.com,1,Lean Right,AllSides v11,US News
+dailymail.co.uk,1,Lean Right,AllSides v11,UK News
+thefreepress.com,1,Lean Right,AllSides v11,US News
+spectator.co.uk,1,Lean Right,MBFC,UK News
+telegraph.co.uk,1,Lean Right,AllSides,UK News
+dailywire.com,1,Lean Right,AllSides,US News
+ijr.com,1,Lean Right,MBFC,US News
+judicialwatch.org,1,Lean Right,MBFC,US News
+theamericanconservative.com,1,Lean Right,MBFC,US News
+realclearinvestigations.com,1,Lean Right,AllSides,US News
+postmillennial.com,1,Lean Right,AllSides,Canadian News
+spectator.com.au,1,Lean Right,MBFC,Australian News
+skynews.com.au,1,Lean Right,MBFC,Australian News
+# Indian Lean Right
+swarajyamag.com,1,Lean Right,MBFC,Indian News
+republicworld.com,1,Lean Right,MBFC,Indian News
+dnaindia.com,1,Lean Right,MBFC,Indian News
+timesnownews.com,1,Lean Right,MBFC,Indian News
+# ══════════════════════════════════════════════════════════════
+# RIGHT (+2)
+# Source: AllSides v11 (Dec 2025), MBFC
+# ══════════════════════════════════════════════════════════════
+breitbart.com,2,Right,AllSides,US News
+dailycaller.com,2,Right,AllSides,US News
+foxnews.com,2,Right,AllSides,US News
+hannity.com,2,Right,AllSides,US News
+newsmax.com,2,Right,AllSides,US News
+oann.com,2,Right,AllSides,US News
+thefederalist.com,2,Right,AllSides,US News
+townhall.com,2,Right,AllSides,US News
+westernjournal.com,2,Right,AllSides,US News
+pjmedia.com,2,Right,AllSides,US News
+thegatewaypundit.com,2,Right,AllSides,US News
+theblaze.com,2,Right,AllSides v11,US News
+infowars.com,2,Right,MBFC,US News
+wnd.com,2,Right,MBFC,US News
+redstate.com,2,Right,MBFC,US News
+twitchy.com,2,Right,MBFC,US News
+rt.com,2,Right,MBFC (Questionable),Russian State
+sputniknews.com,2,Right,MBFC (Questionable),Russian State
+# Indian Right
+opindia.com,2,Right,MBFC,Indian News
