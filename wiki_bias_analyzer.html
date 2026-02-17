@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wikipedia Bias Analyzer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%); min-height: 100vh; color: #1e293b; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width: 48px; height: 48px; border: 4px solid #bfdbfe; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+
+  /* Layout */
+  .center-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .container { max-width: 768px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; min-height: 100vh; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); overflow: hidden; }
+
+  /* Search */
+  .search-box { width: 100%; max-width: 560px; }
+  .search-input { width: 100%; padding: 16px 20px; font-size: 18px; border: 2px solid #e2e8f0; border-radius: 16px; outline: none; background: #fff; transition: border-color 0.2s; }
+  .search-input:focus { border-color: #60a5fa; }
+  .search-input::placeholder { color: #94a3b8; }
+  .suggestions { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); z-index: 50; overflow: hidden; }
+  .suggestion-btn { width: 100%; text-align: left; padding: 12px 20px; border: none; background: none; cursor: pointer; color: #334155; font-size: 15px; border-bottom: 1px solid #f8fafc; transition: background 0.15s; }
+  .suggestion-btn:hover { background: #eff6ff; }
+  .suggestion-btn:last-child { border-bottom: none; }
+
+  /* Buttons */
+  .btn-primary { padding: 12px 32px; background: #2563eb; color: #fff; font-weight: 600; font-size: 15px; border: none; border-radius: 12px; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 8px rgba(37,99,235,0.3); }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary { padding: 8px 16px; background: #f1f5f9; color: #64748b; font-size: 14px; border: none; border-radius: 8px; cursor: pointer; transition: background 0.15s; }
+  .btn-secondary:hover { background: #e2e8f0; }
+
+  /* Section (collapsible) */
+  .section-header { width: 100%; display: flex; align-items: center; gap: 12px; padding: 16px 20px; background: #f8fafc; border: none; cursor: pointer; text-align: left; transition: background 0.15s; }
+  .section-header:hover { background: #f1f5f9; }
+  .section-icon { font-size: 18px; }
+  .section-title { font-weight: 600; color: #1e293b; flex: 1; font-size: 15px; }
+  .section-toggle { color: #94a3b8; font-size: 18px; }
+  .section-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
+
+  /* Stats grid */
+  .stats-grid { display: grid; gap: 16px; }
+  .stats-4 { grid-template-columns: repeat(4, 1fr); }
+  .stats-5 { grid-template-columns: repeat(5, 1fr); }
+  .stat { text-align: center; }
+  .stat-value { font-size: 22px; font-weight: 700; color: #1e293b; }
+  .stat-label { font-size: 11px; color: #64748b; margin-top: 4px; }
+  .stat-sub { font-size: 11px; color: #94a3b8; }
+
+  /* Bars */
+  .metric-row { display: flex; align-items: center; gap: 12px; }
+  .metric-label { font-size: 13px; color: #475569; width: 140px; flex-shrink: 0; }
+  .metric-track { flex: 1; height: 20px; background: #f1f5f9; border-radius: 10px; overflow: hidden; }
+  .metric-fill { height: 100%; border-radius: 10px; transition: width 0.5s; }
+  .metric-value { font-size: 13px; font-family: monospace; color: #334155; width: 72px; text-align: right; }
+
+  /* Sentiment bars */
+  .sent-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .sent-name { font-size: 12px; color: #475569; width: 176px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sent-track { flex: 1; height: 12px; background: #f1f5f9; border-radius: 6px; overflow: hidden; position: relative; }
+  .sent-center { position: absolute; top: 0; bottom: 0; width: 1px; background: #cbd5e1; left: 50%; }
+  .sent-fill { position: absolute; top: 0; bottom: 0; border-radius: 6px; opacity: 0.7; }
+  .sent-val { font-size: 12px; font-family: monospace; width: 56px; text-align: right; }
+
+  /* Bias spectrum */
+  .spectrum-bar { position: relative; height: 32px; border-radius: 16px; overflow: hidden; background: linear-gradient(to right, #2563eb, #60a5fa, #a3a3a3, #f87171, #dc2626); }
+  .spectrum-marker { position: absolute; top: 0; bottom: 0; width: 4px; background: #fff; border: 2px solid #1e293b; border-radius: 4px; z-index: 10; transform: translateX(-50%); }
+  .spectrum-labels { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; font-size: 11px; font-weight: 700; color: #fff; }
+  .dist-bar-row { display: flex; gap: 4px; height: 64px; align-items: flex-end; }
+  .dist-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .dist-fill { border-radius: 4px 4px 0 0; width: 100%; }
+  .dist-count { font-size: 11px; color: #64748b; }
+  .dist-labels { display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; }
+
+  /* Source list */
+  .source-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 2px 0; }
+  .source-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .source-domain { color: #334155; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .source-rating { color: #94a3b8; font-size: 12px; }
+  .source-count { font-family: monospace; color: #64748b; width: 32px; text-align: right; }
+
+  /* Misc */
+  .desc { font-size: 12px; color: #94a3b8; }
+  .section-prop-row { display: flex; align-items: center; gap: 8px; }
+  .section-prop-name { font-size: 12px; color: #475569; width: 176px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .section-prop-track { flex: 1; height: 16px; background: #f1f5f9; border-radius: 8px; overflow: hidden; }
+  .section-prop-fill { height: 100%; background: #60a5fa; border-radius: 8px; }
+  .section-prop-val { font-size: 12px; font-family: monospace; color: #64748b; width: 56px; text-align: right; }
+  .tag { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; }
+  .tag-green { background: #dcfce7; color: #15803d; }
+  .tag-gray { background: #f1f5f9; color: #94a3b8; }
+  .quote-box { font-size: 12px; color: #64748b; padding: 12px; border-radius: 8px; margin-top: 4px; }
+  .quote-green { background: #f0fdf4; }
+  .quote-red { background: #fef2f2; }
+  .quote-label-green { font-weight: 600; color: #15803d; }
+  .quote-label-red { font-weight: 600; color: #b91c1c; }
+  .example-line { font-size: 12px; color: #64748b; }
+  .example-bold { font-weight: 600; }
+  .footer { text-align: center; font-size: 12px; color: #94a3b8; padding: 16px 0; }
+  .five-col { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; text-align: center; font-size: 12px; color: #94a3b8; padding-top: 16px; }
+  .header-bar { display: flex; align-items: center; justify-content: space-between; background: #fff; border-radius: 16px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; }
+  .header-title { font-size: 18px; font-weight: 700; color: #1e293b; }
+  .header-sub { font-size: 13px; color: #64748b; }
+  .small-title { font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .tags-row { display: flex; gap: 12px; margin-top: 12px; }
+
+  @media (max-width: 640px) {
+    .stats-4 { grid-template-columns: repeat(2, 1fr); }
+    .stats-5 { grid-template-columns: repeat(3, 1fr); }
+    .metric-label { width: 100px; }
+    .sent-name { width: 100px; }
+    .section-prop-name { width: 100px; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ═══════════════════════════════════════════════════════════════════
+// ALLSIDES MEDIA BIAS RATINGS
+// Source: https://www.allsides.com/media-bias/ratings
+// Scale: -2=Left, -1=Lean Left, 0=Center, +1=Lean Right, +2=Right
+// ═══════════════════════════════════════════════════════════════════
+const ALLSIDES = {
+  "alternet.org":-2,"dailykos.com":-2,"democracynow.org":-2,"huffpost.com":-2,
+  "huffingtonpost.com":-2,"jacobin.com":-2,"motherjones.com":-2,"msnbc.com":-2,
+  "newrepublic.com":-2,"rawstory.com":-2,"salon.com":-2,"slate.com":-2,
+  "thenation.com":-2,"truthout.org":-2,"vox.com":-2,"currentaffairs.org":-2,
+  "theintercept.com":-2,"commondreams.org":-2,
+  "apnews.com":-1,"abcnews.go.com":-1,"abc.net.au":-1,"theatlantic.com":-1,
+  "bbc.com":-1,"bbc.co.uk":-1,"bloomberg.com":-1,"businessinsider.com":-1,
+  "cbsnews.com":-1,"cnn.com":-1,"theguardian.com":-1,"latimes.com":-1,
+  "nbcnews.com":-1,"newyorker.com":-1,"nytimes.com":-1,"npr.org":-1,
+  "pbs.org":-1,"politico.com":-1,"time.com":-1,"usatoday.com":-1,
+  "washingtonpost.com":-1,"wired.com":-1,"vice.com":-1,"thedailybeast.com":-1,
+  "insider.com":-1,"axios.com":-1,"propublica.org":-1,"scientificamerican.com":-1,
+  "theconversation.com":-1,"theverge.com":-1,"economist.com":-1,"ft.com":-1,
+  "foreignaffairs.com":-1,
+  "reuters.com":0,"c-span.org":0,"thehill.com":0,"realclearpolitics.com":0,
+  "allsides.com":0,"snopes.com":0,"factcheck.org":0,"politifact.com":0,
+  "csmonitor.com":0,"newsweek.com":0,"marketwatch.com":0,"cfr.org":0,
+  "foxbusiness.com":1,"nypost.com":1,"washingtontimes.com":1,"wsj.com":1,
+  "reason.com":1,"nationalreview.com":1,"forbes.com":1,"spectator.co.uk":1,
+  "telegraph.co.uk":1,"washingtonexaminer.com":1,"freebeacon.com":1,
+  "dailywire.com":1,"thedispatch.com":1,
+  "breitbart.com":2,"dailycaller.com":2,"foxnews.com":2,"hannity.com":2,
+  "newsmax.com":2,"oann.com":2,"thefederalist.com":2,"townhall.com":2,
+  "westernjournal.com":2,"pjmedia.com":2,"thegatewaypundit.com":2,
+  "epochtimes.com":2,"zerohedge.com":2,
+  "nature.com":0,"science.org":0,"sciencedirect.com":0,"thelancet.com":0,
+  "bmj.com":0,"nejm.org":0,"who.int":0,"cdc.gov":0,"nih.gov":0,
+  "ncbi.nlm.nih.gov":0,"pubmed.ncbi.nlm.nih.gov":0,"doi.org":0,"jstor.org":0,
+  "springer.com":0,"wiley.com":0,"tandfonline.com":0,"cambridge.org":0,
+  "arxiv.org":0,"un.org":0,"worldbank.org":0,"britannica.com":0,"loc.gov":0,
+  "ndtv.com":-1,"thehindu.com":-1,"scroll.in":-1,"thewire.in":-1,
+  "thenewsminute.com":-1,"firstpost.com":-1,"indiatoday.in":0,
+  "hindustantimes.com":0,"indianexpress.com":0,"livemint.com":0,
+  "theprint.in":0,"deccanherald.com":0,"timesofindia.indiatimes.com":0,
+  "opindia.com":2,"swarajyamag.com":1,"republicworld.com":1,"dnaindia.com":1,
+  "aljazeera.com":-1,"dw.com":0,"france24.com":0,"rt.com":2,"scmp.com":0,
+  "cbc.ca":-1,"skynews.com.au":1,
+};
+const BIAS_LABELS = {"-2":"Left","-1":"Lean Left","0":"Center","1":"Lean Right","2":"Right"};
+const BIAS_COLORS = {"-2":"#2563eb","-1":"#60a5fa","0":"#a3a3a3","1":"#f87171","2":"#dc2626"};
+
+// ═══════════════════════════════════════════════════════════════════
+// WIKIPEDIA POLICY WORD LISTS
+// ═══════════════════════════════════════════════════════════════════
+const WEASEL = [
+  "some say","some people","some argue","many people","many believe","many scholars",
+  "many feel","most people","most believe","most feel","experts say","experts believe",
+  "experts claim","critics say","critics argue","critics claim","observers note",
+  "analysts say","research has shown","studies have shown","studies suggest",
+  "everyone knows","it is said","it is thought","it is believed",
+  "it is widely thought","it is widely believed","it is generally thought",
+  "it is commonly believed","it is often said","it is often reported",
+  "it is widely regarded","it is considered","it is claimed",
+  "it has been suggested","it has been said","it has been claimed",
+  "it has been argued","widely regarded as","generally considered",
+  "science says","scientists claim","supporters argue","opponents argue",
+  "some evidence","evidence suggests","growing number","a number of","significant number",
+];
+const PEACOCK = [
+  "legendary","iconic","renowned","world-renowned","world-famous","prestigious",
+  "illustrious","groundbreaking","revolutionary","pioneering","trailblazing",
+  "visionary","brilliant","extraordinary","remarkable","exceptional","outstanding",
+  "stunning","spectacular","masterpiece","tour de force","acclaimed",
+  "critically acclaimed","award-winning","best-selling","best known",
+  "widely considered","unmatched","unrivaled","unparalleled","foremost",
+  "preeminent","one of the greatest","one of the most","one of the best",
+  "widely praised","hugely successful","immensely popular","show-stopping",
+  "chart-topping","blockbuster","runaway success","cutting-edge",
+  "state-of-the-art","innovative",
+];
+const EDITORIAL = [
+  "revealed","exposed","unveiled","admitted","confessed","conceded","denied",
+  "insisted","boasted","clarified","pointed out","noted","of course",
+  "needless to say","clearly","obviously","undeniably","unquestionably",
+  "indisputably","without a doubt","without question","naturally","inevitably",
+  "interestingly","surprisingly","remarkably","ironically","significantly",
+  "importantly","crucially","notably","controversially","famously","infamously",
+  "so-called","allegedly","purportedly","supposedly",
+];
+const HEDGING = [
+  "may","might","could","would","possibly","perhaps","arguably","probably",
+  "apparently","seemingly","seem","seems","seemed","appear","appears","appeared",
+  "suggest","suggests","suggested","tend","tends","tended","generally","typically",
+  "usually","often","sometimes","rarely","to some extent","in some cases",
+];
+const INTENSIFIERS = [
+  "very","extremely","highly","incredibly","enormously","tremendously","deeply",
+  "profoundly","overwhelmingly","drastically","sharply","dramatically","vastly",
+  "massively","immensely","significantly",
+];
+const SUPERLATIVES = [
+  "best","worst","greatest","largest","smallest","most","least","first ever",
+  "biggest","strongest","weakest","highest","lowest","finest","poorest",
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// COMPACT VADER SENTIMENT LEXICON (~1,200 high-impact words)
+// ═══════════════════════════════════════════════════════════════════
+const VADER_LEX = {
+  "abandon":-1.6,"abandoned":-1.8,"abandons":-1.6,"abhor":-2.6,"abhorred":-2.7,
+  "abhorrent":-2.8,"abuse":-3.0,"abused":-2.9,"abuses":-2.6,"abusive":-3.0,
+  "acclaim":2.5,"acclaimed":2.6,"accomplish":2.0,"accomplished":2.2,
+  "achievement":2.4,"achievements":2.2,"adequate":0.8,"admirable":2.2,
+  "admire":2.5,"admired":2.4,"adorable":2.5,"adore":2.7,"adored":2.5,
+  "advantage":1.6,"advantages":1.6,"adverse":-1.8,"adversely":-1.9,
+  "afraid":-1.8,"aggravate":-1.8,"aggressive":-1.5,"agony":-2.8,
+  "agree":1.2,"agreeable":1.6,"agreed":1.2,"alarm":-1.5,"alarming":-2.0,
+  "alert":-0.3,"alienate":-1.5,"alive":1.2,"allegation":-1.2,"allege":-1.1,
+  "amazing":2.6,"ambitious":1.2,"amuse":1.8,"amused":1.8,"amusing":1.9,
+  "anger":-2.1,"angry":-2.3,"anguish":-2.5,"annihilate":-2.4,"annoy":-1.6,
+  "annoyed":-1.8,"annoying":-1.9,"antagonize":-1.7,"anxiety":-1.6,
+  "anxious":-1.1,"apathetic":-1.2,"apologize":0.6,"appall":-2.3,
+  "appalling":-2.5,"applaud":2.1,"applause":2.2,"appreciate":1.9,
+  "appreciated":2.0,"appreciation":2.1,"apprehensive":-1.2,"appropriate":1.0,
+  "approval":1.7,"approve":1.7,"approved":1.6,"ardent":1.3,"arrest":-1.9,
+  "arrogant":-2.0,"ashamed":-1.8,"assault":-2.8,"asset":1.2,"astonish":1.5,
+  "atrocious":-3.2,"atrocity":-3.4,"attack":-2.1,"attacked":-2.2,
+  "attacks":-2.0,"attractive":2.0,"austere":-0.8,"authority":0.5,
+  "aversion":-1.6,"avoid":-0.8,"avoided":-0.8,"awful":-2.5,"awkward":-1.1,
+  "bad":-2.5,"ban":-1.6,"banned":-1.7,"barbaric":-2.8,"bastard":-3.4,
+  "battle":-1.4,"beautiful":2.7,"beauty":2.6,"befriend":1.5,"beg":-1.2,
+  "beneficial":1.8,"benefit":1.6,"benefits":1.6,"benevolent":2.0,
+  "best":2.2,"betray":-2.8,"betrayal":-2.9,"better":1.5,"bias":-1.4,
+  "biased":-1.6,"bitter":-2.0,"bitterness":-2.1,"bizarre":-1.0,
+  "blame":-2.0,"blamed":-2.1,"bless":1.8,"blessed":2.0,"blessing":2.2,
+  "blind":-0.6,"bliss":2.8,"block":-1.0,"blocked":-1.1,"bloody":-2.0,
+  "bold":1.3,"bomb":-2.5,"bonus":1.5,"bore":-1.5,"bored":-1.5,
+  "boring":-2.0,"bother":-1.3,"brave":2.0,"bravery":2.4,"breach":-1.5,
+  "break":-0.9,"brilliant":2.8,"broken":-1.8,"brutal":-2.8,"brutality":-3.0,
+  "bully":-2.5,"burden":-1.6,"calm":1.3,"cancel":-1.0,"capable":1.5,
+  "captivate":2.0,"care":1.5,"careful":1.0,"careless":-1.5,"catastrophe":-3.0,
+  "catastrophic":-3.2,"celebrate":2.3,"celebrated":2.2,"celebration":2.4,
+  "censorship":-1.6,"challenge":-0.5,"champion":2.0,"chaos":-2.2,
+  "chaotic":-2.0,"charm":1.8,"charming":2.2,"cheap":-1.0,"cheat":-2.5,
+  "cheated":-2.6,"cheerful":2.2,"cherish":2.4,"civil":0.8,"claim":-0.3,
+  "clash":-1.6,"clean":1.0,"clever":1.8,"collapse":-2.2,"collusion":-2.0,
+  "combat":-1.4,"comfort":1.8,"comfortable":1.6,"command":0.5,
+  "commend":2.0,"commit":-0.2,"committed":0.6,"compassion":2.2,
+  "compassionate":2.4,"compel":-0.3,"competent":1.5,"complain":-1.5,
+  "complaint":-1.5,"compliment":2.0,"compromise":0.3,"concern":-0.8,
+  "concerned":-0.9,"condemn":-2.3,"condemned":-2.4,"condemnation":-2.4,
+  "confidence":1.8,"confident":1.8,"conflict":-1.8,"confuse":-1.2,
+  "confused":-1.3,"confusion":-1.3,"congratulate":2.3,"conquer":1.2,
+  "conscience":0.8,"consent":0.8,"conservative":0.0,"conspiracy":-1.8,
+  "constructive":1.5,"contaminate":-2.0,"contempt":-2.3,"content":1.5,
+  "contented":1.6,"controversial":-1.0,"controversy":-1.2,"convenient":1.2,
+  "conviction":-0.4,"cooperate":1.5,"cooperation":1.6,"correct":1.2,
+  "corrupt":-2.8,"corruption":-2.8,"costly":-1.2,"courage":2.2,
+  "courageous":2.4,"courteous":1.6,"crash":-2.0,"crazy":-1.6,
+  "creative":1.8,"crime":-2.5,"criminal":-2.2,"crisis":-2.2,"critic":-0.8,
+  "critical":-1.0,"criticism":-1.2,"criticize":-1.5,"criticized":-1.6,
+  "cruel":-2.8,"cruelty":-3.0,"crush":-1.8,"cry":-1.5,"cure":1.8,
+  "curious":1.0,"damage":-2.2,"damaged":-2.2,"danger":-2.0,"dangerous":-2.2,
+  "daring":1.3,"dark":-1.0,"deadly":-2.8,"death":-2.5,"debate":-0.3,
+  "decay":-1.8,"deceit":-2.5,"deceive":-2.5,"decent":1.2,"decisive":1.2,
+  "decline":-1.5,"defeat":-2.0,"defeated":-2.2,"defend":0.8,"defense":0.5,
+  "defiant":-0.5,"defy":-0.6,"degrade":-2.2,"delay":-1.0,"deliberate":-0.3,
+  "delight":2.5,"delighted":2.6,"delightful":2.7,"demand":-0.8,
+  "democracy":1.0,"demolish":-2.0,"demonstrate":0.5,"denial":-1.4,
+  "denounce":-2.0,"deny":-1.2,"depressed":-2.2,"depression":-2.0,
+  "deprive":-1.8,"deride":-2.0,"deserve":0.8,"desire":1.2,"despair":-2.5,
+  "desperate":-2.0,"despicable":-3.0,"despise":-2.8,"destroy":-2.8,
+  "destroyed":-2.8,"destruction":-2.8,"destructive":-2.5,"detain":-1.5,
+  "determined":1.3,"devastating":-2.8,"devastation":-3.0,"devote":1.5,
+  "devoted":1.8,"dignity":1.6,"dire":-2.2,"dirty":-1.8,"disable":-1.2,
+  "disabled":-0.8,"disadvantage":-1.5,"disagree":-1.0,"disappear":-0.8,
+  "disappoint":-1.8,"disappointed":-1.8,"disappointing":-2.0,
+  "disappointment":-2.0,"disaster":-2.8,"disastrous":-3.0,"disbelief":-1.2,
+  "discord":-1.5,"discourage":-1.5,"discriminate":-2.0,"discrimination":-2.2,
+  "disease":-1.8,"disgrace":-2.5,"disgusting":-3.0,"dishonest":-2.5,
+  "dislike":-1.5,"dismiss":-1.2,"dismissed":-1.3,"disorder":-1.5,
+  "dispute":-1.3,"disrespect":-2.0,"disrupt":-1.5,"disruption":-1.5,
+  "dissent":-0.8,"distort":-1.8,"distress":-2.0,"disturb":-1.5,
+  "disturbing":-2.2,"diverse":1.0,"divide":-1.0,"divine":2.0,
+  "dominate":-0.8,"doom":-2.5,"doubt":-1.2,"dread":-2.2,"dreadful":-2.8,
+  "dream":1.5,"dull":-1.2,"eager":1.5,"ease":1.2,"effective":1.5,
+  "efficient":1.5,"effort":0.8,"elegant":2.0,"eliminate":-0.8,
+  "embarrass":-1.8,"embarrassing":-2.0,"embrace":1.8,"emergency":-1.5,
+  "emotional":-0.3,"empathy":1.8,"empower":1.8,"empowered":2.0,
+  "empty":-0.8,"encourage":1.8,"encouraged":1.7,"encouraging":1.8,
+  "endanger":-2.2,"endure":0.5,"enemy":-2.0,"energetic":1.5,"engage":1.0,
+  "enjoy":2.2,"enjoyable":2.2,"enjoyment":2.2,"enormous":0.5,
+  "enrage":-2.5,"enrich":1.8,"enthusiasm":2.0,"enthusiastic":2.2,
+  "epidemic":-2.0,"equal":1.0,"equality":1.5,"error":-1.2,"escape":0.3,
+  "essential":1.0,"esteem":1.5,"ethical":1.2,"evil":-3.0,"exaggerate":-1.2,
+  "excellent":2.5,"exceptional":2.5,"excessive":-1.0,"excite":2.0,
+  "excited":2.2,"exciting":2.3,"exclude":-1.2,"excuse":-0.5,
+  "exhaust":-1.2,"exile":-1.8,"exploit":-1.8,"exploitation":-2.2,
+  "explosion":-1.8,"expose":-0.8,"extraordinary":2.2,"extreme":-0.8,
+  "extremism":-2.2,"extremist":-2.2,"fabulous":2.8,"fail":-2.0,
+  "failed":-2.0,"failure":-2.2,"fair":1.5,"fairness":1.8,"faith":1.5,
+  "faithful":1.8,"fake":-2.0,"fame":1.0,"famous":1.5,"fantastic":2.8,
+  "fascinate":2.0,"fascinating":2.2,"fatal":-2.8,"fatality":-2.8,
+  "fault":-1.5,"favor":1.2,"favorable":1.5,"fear":-2.0,"fearful":-2.0,
+  "feasible":1.0,"fiasco":-2.5,"fierce":-1.0,"fight":-1.2,"fine":1.2,
+  "flaw":-1.2,"flawed":-1.5,"flourish":2.0,"fool":-2.0,"foolish":-1.8,
+  "forbid":-1.5,"force":-0.8,"forgive":1.5,"fortunate":1.8,"fortune":1.5,
+  "foul":-2.2,"fraud":-2.8,"fraudulent":-2.8,"free":1.5,"freedom":2.0,
+  "friendly":1.8,"frighten":-2.0,"frightening":-2.2,"frustrate":-1.8,
+  "frustrated":-1.9,"frustrating":-2.0,"frustration":-2.0,"fulfill":2.0,
+  "fun":2.2,"fundamental":0.5,"furious":-2.5,"generous":2.2,
+  "gentle":1.5,"genuine":1.8,"glad":2.0,"glory":2.0,
+  "good":1.9,"goodness":2.0,"grace":1.8,"graceful":2.0,"gracious":2.2,
+  "grand":1.8,"grant":1.0,"grateful":2.2,"grave":-1.8,"greed":-2.5,
+  "greedy":-2.2,"grief":-2.5,"grieve":-2.2,"grim":-2.0,"gross":-2.0,
+  "groundbreaking":2.0,"guarantee":1.2,"guilt":-2.2,"guilty":-2.2,
+  "happy":2.5,"happiness":2.8,"hard":-0.6,"hardship":-1.8,"harm":-2.2,
+  "harmful":-2.2,"harmony":2.0,"harsh":-1.8,"hassle":-1.2,"hate":-2.8,
+  "hatred":-3.0,"hazard":-1.8,"hazardous":-2.0,"heal":1.5,"health":1.0,
+  "healthy":1.5,"heartbreak":-2.5,"heaven":1.8,"heavenly":2.5,
+  "helpful":1.8,"helpless":-2.0,"hero":2.2,"heroic":2.5,"hesitant":-0.8,
+  "highlight":0.5,"honest":1.8,"honesty":2.0,"honor":2.0,"honored":2.2,
+  "hope":1.5,"hopeful":1.8,"hopeless":-2.2,"horrible":-2.8,"horrific":-3.0,
+  "horrify":-2.8,"horror":-2.8,"hostile":-2.2,"hostility":-2.2,
+  "huge":0.5,"humane":1.5,"humble":1.2,"humiliate":-2.5,"humiliation":-2.5,
+  "humor":1.5,"hunger":-1.2,"hurt":-2.0,"ideal":1.8,"ignorance":-1.8,
+  "ignorant":-2.0,"ignore":-1.2,"illegal":-2.0,"illegitimate":-2.0,
+  "immoral":-2.5,"impact":-0.3,"impair":-1.5,"impartial":1.2,
+  "impeach":-1.5,"impede":-1.2,"important":1.0,"impose":-1.0,
+  "impossible":-1.5,"impress":1.8,"impressed":1.8,"impressive":2.2,
+  "imprison":-2.0,"improve":1.5,"improvement":1.8,"inadequate":-1.5,
+  "incompetent":-2.2,"incredible":2.3,"indifferent":-0.8,"inequality":-1.5,
+  "infamous":-1.8,"inferior":-1.5,"inflame":-1.8,"influence":0.5,
+  "influential":1.0,"inform":0.8,"inhuman":-3.0,"injure":-2.0,
+  "injured":-2.0,"injury":-1.8,"injustice":-2.5,"innocent":1.0,
+  "innovative":1.8,"insane":-2.0,"insecure":-1.5,"insensitive":-1.8,
+  "inspire":2.2,"inspired":2.2,"inspiring":2.5,"insult":-2.2,
+  "insulting":-2.5,"integrity":2.0,"intelligent":1.8,"intense":-0.3,
+  "interest":1.0,"interesting":1.5,"interfere":-1.2,"intimidate":-2.0,
+  "invade":-2.0,"invasion":-2.0,"invest":0.8,"investigate":0.3,
+  "irrational":-1.5,"irresponsible":-2.0,"irritate":-1.5,"isolate":-1.2,
+  "jealous":-1.8,"jeopardize":-2.0,"joy":2.5,"joyful":2.8,"judge":-0.5,
+  "just":1.0,"justice":1.8,"justify":0.3,"keen":1.2,"kidnap":-2.8,
+  "kill":-3.0,"killed":-3.0,"killing":-3.0,"kind":1.8,"kindness":2.2,
+  "lack":-1.0,"lame":-1.5,"lament":-1.5,"laugh":1.5,"launch":0.5,
+  "lawful":1.0,"lawless":-2.0,"lead":0.5,"leader":0.8,"legacy":0.8,
+  "legal":0.5,"legitimate":1.0,"liberal":0.0,"liberate":1.8,"liberty":2.0,
+  "lie":-2.5,"like":1.0,"limit":-0.5,"lonely":-1.8,"lose":-1.8,
+  "loss":-2.0,"lost":-1.5,"love":2.5,"lovely":2.5,"loyal":1.8,
+  "loyalty":2.0,"luck":1.5,"lucky":2.0,"mad":-1.8,"magnificent":2.8,
+  "malicious":-2.8,"mandate":-0.3,"manipulate":-2.2,"manipulation":-2.2,
+  "marvelous":2.8,"massacre":-3.5,"master":1.0,"meaningful":1.8,
+  "menace":-2.2,"mercy":1.5,"merit":1.5,"mess":-1.5,"militant":-1.5,
+  "miracle":2.5,"miserable":-2.5,"misery":-2.5,"mislead":-2.2,
+  "misleading":-2.2,"miss":-0.8,"mistake":-1.5,"mistrust":-1.8,
+  "mob":-1.8,"mock":-1.8,"modest":0.8,"moral":1.0,"mourn":-2.0,
+  "murder":-3.5,"murdered":-3.5,"nasty":-2.5,"necessary":0.5,
+  "negative":-1.5,"neglect":-1.8,"negligence":-1.8,"negligent":-1.8,
+  "negotiate":0.5,"nervous":-1.2,"neutral":0.3,"nice":1.5,"noble":2.0,
+  "nonsense":-1.8,"notorious":-1.8,"nurture":1.5,"object":-0.5,
+  "objection":-1.0,"objective":0.8,"obligate":-0.5,"obscene":-2.5,
+  "obstacle":-1.2,"offend":-2.0,"offensive":-2.2,"optimism":2.0,
+  "optimistic":2.2,"oppress":-2.5,"oppression":-2.5,"oppose":-1.2,
+  "opposition":-1.0,"ordeal":-2.0,"outstanding":2.5,"overcome":1.2,
+  "overlook":-0.8,"overwhelm":-0.8,"pain":-2.2,"painful":-2.2,
+  "panic":-2.0,"paradise":2.5,"pardon":0.8,"passion":1.8,"passionate":2.0,
+  "patience":1.5,"patient":1.2,"patriot":1.2,"peace":2.0,"peaceful":2.2,
+  "penalty":-1.5,"perfect":2.5,"peril":-2.2,"perilous":-2.2,
+  "permit":0.5,"persecute":-2.8,"persecution":-2.8,"persist":0.5,
+  "pessimistic":-1.8,"pity":-1.0,"plague":-2.2,"pleasant":1.8,
+  "please":1.2,"pleased":1.8,"pleasure":2.2,"plunder":-2.5,"poison":-2.5,
+  "polite":1.5,"pollute":-2.0,"pollution":-2.0,"poor":-1.5,"popular":1.2,
+  "positive":1.5,"poverty":-2.0,"power":0.5,"powerful":1.0,
+  "powerless":-1.8,"praise":2.2,"precious":2.0,"prejudice":-2.2,
+  "preserve":1.2,"prevent":0.3,"pride":1.5,"privilege":1.2,
+  "problem":-1.2,"profit":1.0,"progress":1.5,"prohibit":-1.0,
+  "prominent":1.0,"promise":1.2,"promote":1.0,"proper":1.0,
+  "prosper":2.0,"prosperity":2.2,"protect":1.5,"protection":1.5,
+  "protest":-1.0,"proud":1.8,"provoke":-1.5,"punish":-1.8,
+  "punishment":-1.8,"pure":1.5,"purpose":1.0,"quarrel":-1.5,
+  "question":-0.3,"quiet":0.5,"racism":-3.0,"racist":-3.0,"rage":-2.5,
+  "reckless":-2.0,"reconcile":1.5,"recover":1.2,"recovery":1.5,
+  "reduce":-0.3,"reform":1.0,"refugee":-0.8,"refuse":-1.0,"regret":-1.5,
+  "reject":-1.5,"rejected":-1.8,"rejoice":2.2,"relax":1.5,"release":0.5,
+  "relevant":0.5,"reliable":1.5,"relief":1.5,"remarkable":2.2,
+  "remedy":1.2,"remorse":-1.5,"renew":1.2,"repeal":-0.5,"repression":-2.5,
+  "rescue":1.8,"resent":-2.0,"resentment":-2.0,"resist":-0.5,
+  "resolve":1.2,"respect":1.8,"respected":2.0,"responsibility":1.0,
+  "responsible":1.2,"restore":1.5,"restrain":-0.5,"restrict":-1.0,
+  "restriction":-1.0,"retaliate":-1.5,"revenge":-2.0,"revolt":-1.5,
+  "revolution":-0.5,"reward":1.8,"rich":1.0,"ridicule":-2.0,
+  "ridiculous":-1.8,"right":0.8,"righteous":1.5,"rights":1.2,
+  "rigid":-1.0,"riot":-2.2,"risk":-1.2,"rival":-0.8,"rob":-2.5,
+  "ruin":-2.5,"ruined":-2.5,"ruthless":-2.8,"sacred":1.2,"sacrifice":0.5,
+  "sad":-1.8,"sadness":-2.0,"safe":1.5,"safety":1.5,"sane":0.8,
+  "satisfaction":2.0,"satisfactory":1.2,"satisfy":1.8,"savage":-2.8,
+  "save":1.5,"scandal":-2.2,"scare":-1.8,"secure":1.5,"selfish":-2.0,
+  "sensible":1.2,"sensitive":0.5,"serious":-0.5,"serve":0.8,
+  "setback":-1.5,"severe":-1.8,"shame":-2.0,"shameful":-2.5,
+  "shelter":1.0,"shock":-1.5,"shocking":-2.2,"sick":-1.5,"sin":-2.0,
+  "sincere":1.8,"slaughter":-3.5,"slavery":-3.0,"smart":1.5,
+  "smile":1.5,"solidarity":1.5,"solution":1.2,"solve":1.2,"sorrow":-2.0,
+  "sorry":-1.0,"special":1.5,"spectacular":2.5,"spite":-1.8,
+  "splendid":2.5,"stable":1.0,"steal":-2.2,"strength":1.5,"stress":-1.5,
+  "strict":-0.5,"strike":-1.2,"strong":1.2,"struggle":-1.2,"stupid":-2.2,
+  "submit":-0.5,"succeed":2.0,"success":2.2,"successful":2.2,
+  "suffer":-2.2,"suffering":-2.5,"superb":2.8,"superior":1.5,
+  "support":1.5,"suppress":-2.0,"suppression":-2.2,"sure":0.8,
+  "surprise":0.5,"surrender":-1.2,"survive":0.8,"suspect":-1.0,
+  "suspicion":-1.2,"suspicious":-1.5,"sustain":0.8,"sweet":1.5,
+  "sympathy":1.5,"talent":1.8,"talented":2.0,"tension":-1.2,
+  "terrible":-2.8,"terrify":-2.5,"terrifying":-2.8,"terror":-2.8,
+  "terrorism":-3.0,"terrorist":-3.0,"thankful":2.0,"thankless":-1.2,
+  "threat":-2.0,"threaten":-2.2,"thrive":2.0,"tolerate":0.5,
+  "torture":-3.0,"toxic":-2.2,"tragedy":-2.5,"tragic":-2.5,
+  "traitor":-2.8,"transparent":1.2,"trauma":-2.5,"traumatic":-2.5,
+  "treasure":2.0,"tremendous":1.5,"triumph":2.5,"trouble":-1.5,
+  "troubled":-1.5,"troubling":-1.8,"trust":1.8,"truth":1.5,
+  "tyranny":-2.8,"ugly":-2.0,"unacceptable":-2.2,"unfair":-2.0,
+  "unfortunate":-1.5,"unfortunately":-1.2,"unhappy":-1.8,"unjust":-2.2,
+  "unlawful":-2.0,"unsafe":-2.0,"unstable":-1.5,"upset":-1.5,
+  "urgent":-0.8,"useful":1.2,"useless":-1.8,"valuable":1.8,"value":1.2,
+  "vanish":-0.8,"verdict":-0.3,"veto":-1.2,"vicious":-2.8,"victim":-2.0,
+  "victory":2.5,"vigorous":1.5,"villain":-2.5,"vindicate":1.5,
+  "violate":-2.5,"violation":-2.5,"violence":-2.8,"violent":-2.8,
+  "virtue":1.8,"vital":1.2,"vulnerable":-1.2,"war":-2.5,"warn":-1.0,
+  "warning":-1.2,"waste":-1.5,"weak":-1.5,"weakness":-1.5,"wealth":1.5,
+  "weapon":-1.8,"welcome":1.8,"welfare":1.0,"wellbeing":2.0,
+  "wicked":-2.8,"willing":1.2,"win":2.0,"wisdom":2.0,"wise":1.8,
+  "wish":1.0,"wonderful":2.8,"worry":-1.5,"worse":-2.2,"worship":1.2,
+  "worst":-2.5,"worth":1.2,"worthless":-2.5,"worthy":1.5,"wound":-2.0,
+  "wrath":-2.8,"wreck":-2.0,"wrong":-1.8,"yield":0.3,"zealous":0.5
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// ANALYSIS FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════
+
+function extractDomains(wikitext) {
+  const re = /https?:\/\/([a-zA-Z0-9._-]+\.[a-zA-Z]{2,})/g;
+  const domains = [];
+  let m;
+  while ((m = re.exec(wikitext)) !== null) {
+    let d = m[1].toLowerCase();
+    if (d.startsWith("www.")) d = d.slice(4);
+    domains.push(d);
+  }
+  return domains;
+}
+
+function analyzeSourceBias(wikitext) {
+  const domains = extractDomains(wikitext);
+  const counts = {};
+  domains.forEach(d => { counts[d] = (counts[d] || 0) + 1; });
+  const classified = {}, unclassified = {};
+  for (const [d, c] of Object.entries(counts)) {
+    if (d in ALLSIDES) classified[d] = { count: c, rating: ALLSIDES[d] };
+    else unclassified[d] = c;
+  }
+  const ratings = [];
+  for (const [, info] of Object.entries(classified)) {
+    for (let i = 0; i < info.count; i++) ratings.push(info.rating);
+  }
+  const totalC = ratings.length, totalU = Object.values(unclassified).reduce((a,b)=>a+b,0);
+  if (ratings.length === 0) return { mean: null, median: null, std: null, label: "N/A", classified, unclassified, totalC, totalU, dist: {"-2":0,"-1":0,"0":0,"1":0,"2":0}, total: totalU };
+  const mean = ratings.reduce((a,b)=>a+b,0) / ratings.length;
+  const sorted = [...ratings].sort((a,b)=>a-b);
+  const n = sorted.length;
+  const median = n%2===1 ? sorted[Math.floor(n/2)] : (sorted[n/2-1]+sorted[n/2])/2;
+  const variance = ratings.reduce((s,r) => s + (r-mean)**2, 0) / n;
+  const std = Math.sqrt(variance);
+  const dist = {"-2":0,"-1":0,"0":0,"1":0,"2":0};
+  ratings.forEach(r => { dist[String(r)]++; });
+  const roundedMean = Math.round(mean);
+  const label = BIAS_LABELS[String(Math.max(-2, Math.min(2, roundedMean)))] || "Mixed";
+  return { mean, median, std, label, classified, unclassified, totalC, totalU, dist, total: totalC + totalU };
+}
+
+function countPhrases(text, phrases) {
+  const lower = text.toLowerCase();
+  const matches = [];
+  phrases.forEach(p => {
+    const re = new RegExp("\\b" + p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "\\b", "gi");
+    let m;
+    while ((m = re.exec(lower)) !== null) matches.push(m[0]);
+  });
+  return matches;
+}
+
+function analyzePolicyCompliance(plainText) {
+  const wc = plainText.split(/\s+/).length;
+  const weasel = countPhrases(plainText, WEASEL);
+  const peacock = countPhrases(plainText, PEACOCK);
+  const editorial = countPhrases(plainText, EDITORIAL);
+  const total = weasel.length + peacock.length + editorial.length;
+  const freq = arr => { const c = {}; arr.forEach(w => { c[w]=(c[w]||0)+1; }); return Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,8); };
+  return {
+    weasel: { count: weasel.length, density: +(weasel.length/wc*1000).toFixed(1), examples: freq(weasel) },
+    peacock: { count: peacock.length, density: +(peacock.length/wc*1000).toFixed(1), examples: freq(peacock) },
+    editorial: { count: editorial.length, density: +(editorial.length/wc*1000).toFixed(1), examples: freq(editorial) },
+    total: { count: total, density: +(total/wc*1000).toFixed(1) },
+  };
+}
+
+function vaderScore(text) {
+  const words = text.toLowerCase().replace(/[^a-z\s'-]/g, " ").split(/\s+/).filter(Boolean);
+  let sum = 0, count = 0;
+  words.forEach(w => {
+    if (w in VADER_LEX) { sum += parseFloat(VADER_LEX[w]); count++; }
+  });
+  if (count === 0) return 0;
+  const raw = sum / Math.sqrt(sum*sum + 15);
+  return Math.max(-1, Math.min(1, raw));
+}
+
+function splitSentences(text) {
+  return text.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 10);
+}
+
+function analyzeSentiment(sections) {
+  const allScores = [];
+  const sectionData = {};
+  let bestPos = { text: "", score: -1, section: "" };
+  let bestNeg = { text: "", score: 1, section: "" };
+  for (const [name, text] of Object.entries(sections)) {
+    const sents = splitSentences(text);
+    if (!sents.length) continue;
+    const scores = sents.map(s => vaderScore(s));
+    scores.forEach((sc, i) => {
+      allScores.push(sc);
+      if (sc > bestPos.score) bestPos = { text: sents[i].slice(0,120), score: sc, section: name };
+      if (sc < bestNeg.score) bestNeg = { text: sents[i].slice(0,120), score: sc, section: name };
+    });
+    const mean = scores.reduce((a,b)=>a+b,0)/scores.length;
+    sectionData[name] = {
+      mean, sentences: scores.length,
+      posPct: +(scores.filter(s=>s>0.05).length/scores.length*100).toFixed(1),
+      negPct: +(scores.filter(s=>s<-0.05).length/scores.length*100).toFixed(1),
+      neuPct: +(scores.filter(s=>s>=-0.05&&s<=0.05).length/scores.length*100).toFixed(1),
+    };
+  }
+  if (!allScores.length) return { mean:0, median:0, std:0, posPct:0, negPct:0, neuPct:0, sections:{}, bestPos, bestNeg, leadBodyGap:0, sectionVariance:0, totalSentences:0 };
+  const n = allScores.length;
+  const mean = allScores.reduce((a,b)=>a+b,0)/n;
+  const sorted = [...allScores].sort((a,b)=>a-b);
+  const median = n%2===1?sorted[Math.floor(n/2)]:(sorted[n/2-1]+sorted[n/2])/2;
+  const std = Math.sqrt(allScores.reduce((s,v)=>s+(v-mean)**2,0)/n);
+  const secMeans = Object.values(sectionData).map(s=>s.mean);
+  const smMean = secMeans.reduce((a,b)=>a+b,0)/secMeans.length;
+  const sectionVariance = secMeans.length > 1 ? secMeans.reduce((s,v)=>s+(v-smMean)**2,0)/secMeans.length : 0;
+  const secNames = Object.keys(sectionData);
+  const leadMean = sectionData[secNames[0]]?.mean || 0;
+  const bodyMeans = secNames.slice(1).map(k => sectionData[k].mean);
+  const bodyMean = bodyMeans.length ? bodyMeans.reduce((a,b)=>a+b,0)/bodyMeans.length : 0;
+  return {
+    mean, median, std, totalSentences: n,
+    posPct: +(allScores.filter(s=>s>0.05).length/n*100).toFixed(1),
+    negPct: +(allScores.filter(s=>s<-0.05).length/n*100).toFixed(1),
+    neuPct: +(allScores.filter(s=>s>=-0.05&&s<=0.05).length/n*100).toFixed(1),
+    sections: sectionData, bestPos, bestNeg,
+    leadBodyGap: leadMean - bodyMean, sectionVariance,
+  };
+}
+
+function analyzeStructure(sections, wikitext) {
+  const sizes = {};
+  let total = 0;
+  for (const [name, text] of Object.entries(sections)) {
+    const wc = text.split(/\s+/).length;
+    sizes[name] = wc;
+    total += wc;
+  }
+  const vals = Object.values(sizes).sort((a,b)=>a-b);
+  const n = vals.length;
+  let gini = 0;
+  if (n > 1 && total > 0) {
+    let num = 0;
+    vals.forEach((v,i) => { num += (2*(i+1) - n - 1) * v; });
+    gini = Math.abs(num / (n * total));
+  }
+  const largest = Object.entries(sizes).sort((a,b)=>b[1]-a[1])[0];
+  const refTotal = (wikitext.match(/<ref/g) || []).length;
+  const secLower = Object.keys(sections).map(s => s.toLowerCase());
+  return {
+    sections: n, totalWords: total, gini: +gini.toFixed(4),
+    largest: largest ? { name: largest[0], pct: +(largest[1]/total*100).toFixed(1) } : { name: "", pct: 0 },
+    hasCriticism: secLower.some(s => /criticism|controversy|opposition/.test(s)),
+    hasReception: secLower.some(s => /reception|response|reaction/.test(s)),
+    refTotal, refDensity: total > 0 ? +(refTotal/total*1000).toFixed(1) : 0,
+    sectionSizes: sizes,
+  };
+}
+
+function analyzeLexical(plainText) {
+  const words = plainText.split(/\s+/);
+  const wc = words.length;
+  if (!wc) return {};
+  const hedging = countPhrases(plainText, HEDGING).length;
+  const intensifiers = countPhrases(plainText, INTENSIFIERS).length;
+  const superlatives = countPhrases(plainText, SUPERLATIVES).length;
+  const passiveRe = /\b(?:was|were|been|being|is|are)\s+(?:\w+ly\s+)?(?:\w+ed|made|done|seen|known|shown|held|told|found|built|sent|left|lost|kept|set)\b/gi;
+  const passive = (plainText.match(passiveRe) || []).length;
+  const unique = new Set(words.map(w => w.toLowerCase().replace(/[^a-z']/g,"")));
+  const ttr = unique.size / wc;
+  const freq = {};
+  words.forEach(w => { const k = w.toLowerCase().replace(/[^a-z']/g,""); if(k) freq[k]=(freq[k]||0)+1; });
+  const hapax = Object.values(freq).filter(c => c === 1).length;
+  return {
+    wordCount: wc, ttr: +ttr.toFixed(4), hapaxRatio: +(hapax/wc).toFixed(4),
+    hedging: { count: hedging, density: +(hedging/wc*1000).toFixed(1) },
+    intensifiers: { count: intensifiers, density: +(intensifiers/wc*1000).toFixed(1) },
+    superlatives: { count: superlatives, density: +(superlatives/wc*1000).toFixed(1) },
+    passive: { count: passive, density: +(passive/wc*1000).toFixed(1) },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WIKITEXT PARSING
+// ═══════════════════════════════════════════════════════════════════
+
+function parseWikitext(wikitext) {
+  const sections = {};
+  let current = "Lead";
+  let buffer = [];
+  const lines = wikitext.split("\n");
+  const skip = new Set(["see also","references","external links","further reading","notes","citations","bibliography","sources"]);
+  for (const line of lines) {
+    const hm = line.match(/^(={2,})\s*(.+?)\s*\1/);
+    if (hm) {
+      const text = stripWikiMarkup(buffer.join("\n"));
+      if (text.trim() && !skip.has(current.toLowerCase())) sections[current] = text;
+      current = hm[2].replace(/\[.*?\]/g,"").trim();
+      buffer = [];
+    } else {
+      buffer.push(line);
+    }
+  }
+  const text = stripWikiMarkup(buffer.join("\n"));
+  if (text.trim() && !skip.has(current.toLowerCase())) sections[current] = text;
+  return sections;
+}
+
+function stripWikiMarkup(text) {
+  let t = text;
+  t = t.replace(/<ref[^>]*\/>/g, "");
+  t = t.replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, "");
+  t = t.replace(/<!--[\s\S]*?-->/g, "");
+  t = t.replace(/\{\{[^{}]*\}\}/g, "");
+  t = t.replace(/\{\{[^{}]*\}\}/g, "");
+  t = t.replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, "$1");
+  t = t.replace(/\[https?:\/\/[^\s\]]+\s*([^\]]*)\]/g, "$1");
+  t = t.replace(/'{2,3}/g, "");
+  t = t.replace(/<[^>]+>/g, "");
+  t = t.replace(/\s+/g, " ");
+  return t.trim();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// VISUAL COMPONENTS
+// ═══════════════════════════════════════════════════════════════════
+
+function BiasSpectrum({ mean, dist }) {
+  if (mean === null) return <div className="desc" style={{fontStyle:"italic"}}>No classified sources found</div>;
+  const total = Object.values(dist).reduce((a,b)=>a+b,0);
+  const pos = ((mean + 2) / 4) * 100;
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+      <div className="spectrum-bar">
+        <div className="spectrum-marker" style={{ left: `${Math.max(1,Math.min(99,pos))}%` }} />
+        <div className="spectrum-labels">
+          <span>Left</span><span>Lean L</span><span>Center</span><span>Lean R</span><span>Right</span>
+        </div>
+      </div>
+      <div className="dist-bar-row">
+        {["-2","-1","0","1","2"].map(k => {
+          const pct = total > 0 ? (dist[k]/total)*100 : 0;
+          return (
+            <div key={k} className="dist-col">
+              <div className="dist-fill" style={{ height: `${Math.max(3, pct)}%`, minHeight: pct > 0 ? 4 : 2, backgroundColor: BIAS_COLORS[k] }} />
+              <span className="dist-count">{dist[k]}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="dist-labels">
+        <span>Left</span><span>Lean Left</span><span>Center</span><span>Lean Right</span><span>Right</span>
+      </div>
+    </div>
+  );
+}
+
+function MetricBar({ label, value, max, color = "#3b82f6", suffix = "" }) {
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  return (
+    <div className="metric-row">
+      <span className="metric-label">{label}</span>
+      <div className="metric-track">
+        <div className="metric-fill" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
+      <span className="metric-value">{value}{suffix}</span>
+    </div>
+  );
+}
+
+function SentimentBar({ name, data }) {
+  const clr = data.mean > 0.05 ? "#22c55e" : data.mean < -0.05 ? "#ef4444" : "#a3a3a3";
+  return (
+    <div className="sent-row">
+      <span className="sent-name" title={name}>{name}</span>
+      <div className="sent-track">
+        <div className="sent-center" />
+        {data.mean !== 0 && (
+          <div className="sent-fill" style={{
+            left: data.mean > 0 ? "50%" : `${50 + data.mean * 50}%`,
+            width: `${Math.abs(data.mean) * 50}%`,
+            backgroundColor: clr,
+          }} />
+        )}
+      </div>
+      <span className="sent-val" style={{ color: clr }}>
+        {data.mean > 0 ? "+" : ""}{data.mean.toFixed(3)}
+      </span>
+    </div>
+  );
+}
+
+function Section({ title, icon, children, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="card">
+      <button className="section-header" onClick={() => setOpen(!open)}>
+        <span className="section-icon">{icon}</span>
+        <span className="section-title">{title}</span>
+        <span className="section-toggle">{open ? "\u25B2" : "\u25BC"}</span>
+      </button>
+      {open && <div className="section-body">{children}</div>}
+    </div>
+  );
+}
+
+function Stat({ label, value, sub }) {
+  return (
+    <div className="stat">
+      <div className="stat-value">{value}</div>
+      <div className="stat-label">{label}</div>
+      {sub && <div className="stat-sub">{sub}</div>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MAIN APP
+// ═══════════════════════════════════════════════════════════════════
+
+function WikiBiasAnalyzer() {
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState("");
+  const [results, setResults] = useState(null);
+  const [articleTitle, setArticleTitle] = useState("");
+  const inputRef = useRef(null);
+  const timerRef = useRef(null);
+
+  const fetchSuggestions = useCallback(async (q) => {
+    if (q.length < 2) { setSuggestions([]); return; }
+    try {
+      const url = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(q)}&limit=8&namespace=0&format=json&origin=*`;
+      const res = await fetch(url);
+      const data = await res.json();
+      setSuggestions(data[1] || []);
+      setShowSuggestions(true);
+    } catch(e) { setSuggestions([]); }
+  }, []);
+
+  useEffect(() => {
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => fetchSuggestions(query), 250);
+    return () => clearTimeout(timerRef.current);
+  }, [query, fetchSuggestions]);
+
+  const analyze = async (title) => {
+    setLoading(true);
+    setResults(null);
+    setArticleTitle(title);
+    setShowSuggestions(false);
+    setQuery(title);
+    try {
+      setProgress("Fetching article from Wikipedia...");
+      const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=revisions&rvprop=content&rvslots=main&format=json&origin=*`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const pages = data?.query?.pages;
+      if (!pages) throw new Error("Article not found");
+      const page = Object.values(pages)[0];
+      if (!page.revisions) throw new Error("Article not found");
+      const wikitext = page.revisions[0].slots.main["*"];
+      const actualTitle = page.title;
+      setArticleTitle(actualTitle);
+
+      setProgress("Parsing article structure...");
+      await new Promise(r => setTimeout(r, 50));
+      const sections = parseWikitext(wikitext);
+      const plainText = Object.values(sections).join(" ");
+      const wordCount = plainText.split(/\s+/).length;
+
+      setProgress("[1/5] Analyzing source bias profile...");
+      await new Promise(r => setTimeout(r, 50));
+      const sourceBias = analyzeSourceBias(wikitext);
+
+      setProgress("[2/5] Checking Wikipedia policy compliance...");
+      await new Promise(r => setTimeout(r, 50));
+      const policy = analyzePolicyCompliance(plainText);
+
+      setProgress("[3/5] Running VADER sentiment analysis...");
+      await new Promise(r => setTimeout(r, 50));
+      const sentiment = analyzeSentiment(sections);
+
+      setProgress("[4/5] Analyzing structural balance...");
+      await new Promise(r => setTimeout(r, 50));
+      const structure = analyzeStructure(sections, wikitext);
+
+      setProgress("[5/5] Running lexical analysis...");
+      await new Promise(r => setTimeout(r, 50));
+      const lexical = analyzeLexical(plainText);
+
+      setResults({ sourceBias, policy, sentiment, structure, lexical, wordCount, sectionCount: Object.keys(sections).length, title: actualTitle });
+    } catch (e) {
+      setResults({ error: e.message });
+    }
+    setLoading(false);
+    setProgress("");
+  };
+
+  const r = results;
+
+  // ─── SEARCH PAGE ───
+  if (!r && !loading) {
+    return (
+      <div className="center-page">
+        <div className="search-box" style={{display:"flex",flexDirection:"column",gap:"32px"}}>
+          <div style={{textAlign:"center",display:"flex",flexDirection:"column",gap:"12px"}}>
+            <div style={{fontSize:"48px",fontWeight:700,color:"#1e293b"}}>W</div>
+            <h1 style={{fontSize:"28px",fontWeight:700,color:"#1e293b"}}>Wikipedia Bias Analyzer</h1>
+            <p style={{fontSize:"14px",color:"#64748b",maxWidth:"420px",margin:"0 auto",lineHeight:1.5}}>Deterministic, transparent, and replicable bias detection for any English Wikipedia article. Powered by AllSides ratings, Wikipedia policy word lists, and VADER sentiment analysis.</p>
+          </div>
+          <div style={{position:"relative"}}>
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+              onKeyDown={e => { if (e.key === "Enter" && query.trim()) analyze(query.trim()); }}
+              placeholder="Type a Wikipedia article title..."
+              className="search-input"
+            />
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="suggestions">
+                {suggestions.map((s, i) => (
+                  <button key={i} className="suggestion-btn" onClick={() => { setQuery(s); setShowSuggestions(false); analyze(s); }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{textAlign:"center"}}>
+            <button className="btn-primary" onClick={() => query.trim() && analyze(query.trim())} disabled={!query.trim()}>
+              Analyze Article
+            </button>
+          </div>
+          <div className="five-col">
+            <div>Source Bias</div><div>WP:NPOV</div><div>Sentiment</div><div>Structure</div><div>Lexical</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── LOADING STATE ───
+  if (loading) {
+    return (
+      <div className="center-page">
+        <div style={{textAlign:"center",display:"flex",flexDirection:"column",gap:"24px",alignItems:"center"}}>
+          <div className="spinner" />
+          <div>
+            <h2 style={{fontSize:"20px",fontWeight:600,color:"#334155"}}>Analyzing: {articleTitle}</h2>
+            <p style={{color:"#64748b",marginTop:"8px"}}>{progress}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── ERROR ───
+  if (r.error) {
+    return (
+      <div className="center-page">
+        <div style={{textAlign:"center",display:"flex",flexDirection:"column",gap:"16px",alignItems:"center"}}>
+          <div style={{fontSize:"40px"}}>:(</div>
+          <h2 style={{fontSize:"20px",fontWeight:600,color:"#dc2626"}}>Error: {r.error}</h2>
+          <button className="btn-primary" onClick={() => { setResults(null); setQuery(""); }}>Try Again</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── RESULTS PAGE ───
+  const sb = r.sourceBias;
+  const topSources = Object.entries(sb.classified).sort((a,b) => b[1].count - a[1].count).slice(0,10);
+
+  return (
+    <div className="container">
+      {/* Header */}
+      <div className="header-bar">
+        <div>
+          <div className="header-title">{r.title}</div>
+          <div className="header-sub">{r.wordCount.toLocaleString()} words &middot; {r.sectionCount} sections</div>
+        </div>
+        <button className="btn-secondary" onClick={() => { setResults(null); setQuery(""); }}>New Analysis</button>
+      </div>
+
+      {/* Module 1: Source Bias */}
+      <Section title="Source Bias Profile" icon={"\uD83D\uDCF0"}>
+        <p className="desc">Cited domains mapped to AllSides media bias ratings. Scale: -2 (Left) to +2 (Right).</p>
+        <div className="stats-grid stats-4">
+          <Stat label="Mean Bias" value={sb.mean !== null ? (sb.mean > 0 ? "+" : "") + sb.mean.toFixed(2) : "N/A"} sub={sb.label} />
+          <Stat label="Sources" value={sb.total || (sb.totalC + sb.totalU)} />
+          <Stat label="Classified" value={`${sb.totalC} (${sb.total ? Math.round(sb.totalC/sb.total*100) : 0}%)`} />
+          <Stat label="Unique Domains" value={Object.keys(sb.classified).length + Object.keys(sb.unclassified).length} />
+        </div>
+        <BiasSpectrum mean={sb.mean} dist={sb.dist} />
+        {topSources.length > 0 && (
+          <div>
+            <div className="small-title">Top Cited Sources</div>
+            <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+              {topSources.map(([domain, info]) => (
+                <div key={domain} className="source-row">
+                  <div className="source-dot" style={{ backgroundColor: BIAS_COLORS[String(info.rating)] }} />
+                  <span className="source-domain">{domain}</span>
+                  <span className="source-rating">{BIAS_LABELS[String(info.rating)]}</span>
+                  <span className="source-count">{info.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Section>
+
+      {/* Module 2: Policy Compliance */}
+      <Section title="Wikipedia Policy Compliance" icon={"\uD83D\uDCCB"}>
+        <p className="desc">Text scanned against Wikipedia's own WP:WEASEL, WP:PEACOCK, and WP:EDITORIALIZING word lists.</p>
+        <div className="stats-grid stats-4">
+          <Stat label="Total Flags" value={r.policy.total.count} sub={`${r.policy.total.density}/1k words`} />
+          <Stat label="Weasel" value={r.policy.weasel.count} sub={`${r.policy.weasel.density}/1k`} />
+          <Stat label="Peacock" value={r.policy.peacock.count} sub={`${r.policy.peacock.density}/1k`} />
+          <Stat label="Editorial" value={r.policy.editorial.count} sub={`${r.policy.editorial.density}/1k`} />
+        </div>
+        <MetricBar label="Weasel Words" value={r.policy.weasel.density} max={15} color="#f59e0b" suffix="/1k" />
+        <MetricBar label="Peacock Terms" value={r.policy.peacock.density} max={15} color="#8b5cf6" suffix="/1k" />
+        <MetricBar label="Editorializing" value={r.policy.editorial.density} max={15} color="#ef4444" suffix="/1k" />
+        {[["Weasel",r.policy.weasel],["Peacock",r.policy.peacock],["Editorial",r.policy.editorial]].map(([name, data]) =>
+          data.examples.length > 0 && (
+            <div key={name} className="example-line">
+              <span className="example-bold">{name}:</span> {data.examples.map(([w,c]) => `"${w}" (${c})`).join(", ")}
+            </div>
+          )
+        )}
+      </Section>
+
+      {/* Module 3: Sentiment */}
+      <Section title="Sentiment Asymmetry (VADER)" icon={"\uD83D\uDE10"}>
+        <p className="desc">VADER rule-based sentiment. Deterministic lexicon of ~1,200 scored words. Scale: -1.0 to +1.0.</p>
+        <div className="stats-grid stats-5">
+          <Stat label="Mean" value={(r.sentiment.mean > 0 ? "+" : "") + r.sentiment.mean.toFixed(3)} />
+          <Stat label="Positive" value={`${r.sentiment.posPct}%`} />
+          <Stat label="Negative" value={`${r.sentiment.negPct}%`} />
+          <Stat label="Neutral" value={`${r.sentiment.neuPct}%`} />
+          <Stat label="Lead-Body Gap" value={(r.sentiment.leadBodyGap > 0 ? "+" : "") + r.sentiment.leadBodyGap.toFixed(3)} />
+        </div>
+        <div>
+          <div className="small-title">Per-Section Sentiment</div>
+          {Object.entries(r.sentiment.sections).map(([name, data]) => (
+            <SentimentBar key={name} name={name} data={data} />
+          ))}
+        </div>
+        {r.sentiment.bestPos.text && (
+          <div className="quote-box quote-green">
+            <span className="quote-label-green">Most positive ({r.sentiment.bestPos.score.toFixed(3)}):</span> "{r.sentiment.bestPos.text}..."
+          </div>
+        )}
+        {r.sentiment.bestNeg.text && (
+          <div className="quote-box quote-red">
+            <span className="quote-label-red">Most negative ({r.sentiment.bestNeg.score.toFixed(3)}):</span> "{r.sentiment.bestNeg.text}..."
+          </div>
+        )}
+      </Section>
+
+      {/* Module 4: Structure */}
+      <Section title="Structural Balance" icon={"\uD83C\uDFD7\uFE0F"}>
+        <div className="stats-grid stats-4">
+          <Stat label="Sections" value={r.structure.sections} />
+          <Stat label="Gini Coeff." value={r.structure.gini.toFixed(3)} sub="0=even, 1=skewed" />
+          <Stat label="Ref Density" value={`${r.structure.refDensity}/1k`} />
+          <Stat label="Total Refs" value={r.structure.refTotal} />
+        </div>
+        <div>
+          <div className="small-title">Section Proportions</div>
+          {Object.entries(r.structure.sectionSizes).sort((a,b) => b[1] - a[1]).slice(0, 15).map(([name, wc]) => {
+            const pct = r.structure.totalWords > 0 ? (wc / r.structure.totalWords * 100) : 0;
+            return (
+              <div key={name} className="section-prop-row">
+                <span className="section-prop-name" title={name}>{name}</span>
+                <div className="section-prop-track">
+                  <div className="section-prop-fill" style={{ width: `${pct}%` }} />
+                </div>
+                <span className="section-prop-val">{pct.toFixed(1)}%</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="tags-row">
+          <span className={`tag ${r.structure.hasCriticism ? "tag-green" : "tag-gray"}`}>
+            {r.structure.hasCriticism ? "\u2713" : "\u2717"} Criticism/Controversy
+          </span>
+          <span className={`tag ${r.structure.hasReception ? "tag-green" : "tag-gray"}`}>
+            {r.structure.hasReception ? "\u2713" : "\u2717"} Reception/Response
+          </span>
+        </div>
+      </Section>
+
+      {/* Module 5: Lexical */}
+      <Section title="Lexical Analysis" icon={"\uD83D\uDD24"}>
+        <div className="stats-grid stats-4">
+          <Stat label="Words" value={r.lexical.wordCount?.toLocaleString()} />
+          <Stat label="Type-Token Ratio" value={r.lexical.ttr?.toFixed(3)} sub="vocab diversity" />
+          <Stat label="Hapax Ratio" value={r.lexical.hapaxRatio?.toFixed(3)} />
+          <Stat label="Passive Voice" value={r.lexical.passive?.count} sub={`${r.lexical.passive?.density}/1k`} />
+        </div>
+        <MetricBar label="Hedging" value={r.lexical.hedging?.density || 0} max={30} color="#6366f1" suffix="/1k" />
+        <MetricBar label="Intensifiers" value={r.lexical.intensifiers?.density || 0} max={15} color="#f43f5e" suffix="/1k" />
+        <MetricBar label="Superlatives" value={r.lexical.superlatives?.density || 0} max={10} color="#f59e0b" suffix="/1k" />
+        <MetricBar label="Passive Voice" value={r.lexical.passive?.density || 0} max={30} color="#64748b" suffix="/1k" />
+      </Section>
+
+      {/* Footer */}
+      <div className="footer">
+        <p>All metrics are deterministic and rule-based. Same article always produces identical results.</p>
+        <p style={{marginTop:"4px"}}>Sources: AllSides Media Bias Ratings | Wikipedia WP:NPOV Word Lists | VADER Sentiment Lexicon (Hutto &amp; Gilbert 2014)</p>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<WikiBiasAnalyzer />, document.getElementById("root"));
+</script>
+</body>
+</html>
