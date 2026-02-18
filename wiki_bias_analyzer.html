@@ -4,11 +4,27 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Wikipedia Bias Analyzer</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script>
+window.onerror = function(msg, src, line, col, err) {
+  var root = document.getElementById("root");
+  if (root && !root.innerHTML.trim()) {
+    root.innerHTML = '<div style="max-width:600px;margin:60px auto;padding:24px;background:#fff;border:1px solid #e8d5c4;font-family:sans-serif">'
+      + '<h2 style="color:#990f3d;margin-bottom:12px">Failed to load analyzer</h2>'
+      + '<p style="margin-bottom:8px">Error: ' + msg + '</p>'
+      + '<p style="font-size:13px;color:#666">Line ' + line + ', Col ' + col + '</p>'
+      + '<p style="margin-top:12px;font-size:13px">Try: <strong>Ctrl+Shift+R</strong> (hard refresh) or clear browser cache.</p>'
+      + '</div>';
+  }
+  console.error("Global error:", msg, "at", src, line, col, err);
+};
+</script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Source+Sans+3:wght@300;400;600;700&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Source Sans 3', Georgia, 'Times New Roman', serif; background: #fff1e5; min-height: 100vh; color: #33302e; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -124,7 +140,26 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useCallback, useRef } = React;
+const { useState, useEffect, useCallback, useRef, Component } = React;
+
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error("React Error Boundary caught:", error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{maxWidth:"600px",margin:"60px auto",padding:"24px",background:"#fff",border:"1px solid #e8d5c4",fontFamily:"sans-serif"}}>
+          <h2 style={{color:"#990f3d",marginBottom:"12px"}}>Something went wrong</h2>
+          <p style={{marginBottom:"8px"}}>{this.state.error?.message || "Unknown error"}</p>
+          <pre style={{fontSize:"12px",color:"#666",background:"#f6f1eb",padding:"12px",overflow:"auto",maxHeight:"200px"}}>{this.state.error?.stack}</pre>
+          <button onClick={() => window.location.reload()} style={{marginTop:"12px",padding:"8px 16px",background:"#990f3d",color:"#fff",border:"none",cursor:"pointer"}}>Reload Page</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // MEDIA BIAS RATINGS — 219 outlets
@@ -1454,39 +1489,45 @@ function WikiBiasAnalyzer() {
       const plainText = Object.values(sections).join(" ");
       const wordCount = plainText.split(/\s+/).length;
 
-      setProgress("[1/5] Analyzing source bias profile...");
-      await new Promise(r => setTimeout(r, 50));
-      const sourceBias = analyzeSourceBias(wikitext);
+      const safe = (label, fn) => { try { const r = fn(); console.log("[WBA] " + label + " OK"); return r; } catch(e) { console.error("[WBA] " + label + " FAILED:", e); return null; } };
 
-      setProgress("[2/5] Checking Wikipedia policy compliance...");
+      setProgress("[1/9] Analyzing source bias profile...");
       await new Promise(r => setTimeout(r, 50));
-      const policy = analyzePolicyCompliance(plainText);
+      const sourceBias = safe("sourceBias", () => analyzeSourceBias(wikitext)) || { mean: null, label: "Error", classified: {}, unclassified: {}, totalC: 0, totalU: 0, dist: {"-2":0,"-1":0,"0":0,"1":0,"2":0}, total: 0 };
 
-      setProgress("[3/5] Running VADER sentiment analysis...");
+      setProgress("[2/9] Checking Wikipedia policy compliance...");
       await new Promise(r => setTimeout(r, 50));
-      const sentiment = analyzeSentiment(sections);
+      const policy = safe("policy", () => analyzePolicyCompliance(plainText)) || { weasel: {count:0,density:0,examples:[]}, peacock: {count:0,density:0,examples:[]}, editorial: {count:0,density:0,examples:[]}, total: {count:0,density:0} };
 
-      setProgress("[4/5] Analyzing structural balance...");
+      setProgress("[3/9] Running VADER sentiment analysis...");
       await new Promise(r => setTimeout(r, 50));
-      const structure = analyzeStructure(sections, wikitext);
+      const sentiment = safe("sentiment", () => analyzeSentiment(sections)) || { mean: 0, posPct: 0, negPct: 0, neuPct: 0, leadBodyGap: 0, sections: {}, bestPos: {text:"",score:0}, bestNeg: {text:"",score:0} };
 
-      setProgress("[5/8] Running lexical analysis...");
+      setProgress("[4/9] Analyzing structural balance...");
       await new Promise(r => setTimeout(r, 50));
-      const lexical = analyzeLexical(plainText);
+      const structure = safe("structure", () => analyzeStructure(sections, wikitext)) || { sections: 0, totalWords: 0, gini: 0, largest: {name:"",pct:0}, sectionSizes: {}, hasCriticism: false, hasReception: false, refTotal: 0, refDensity: 0 };
 
-      setProgress("[6/8] Entman framing analysis...");
+      setProgress("[5/9] Running lexical analysis...");
       await new Promise(r => setTimeout(r, 50));
-      const entman = analyzeEntmanFraming(plainText);
+      const lexical = safe("lexical", () => analyzeLexical(plainText)) || { wordCount: 0, ttr: 0, hapaxRatio: 0, hedging: {count:0,density:0}, intensifiers: {count:0,density:0}, superlatives: {count:0,density:0}, passive: {count:0,density:0} };
 
-      setProgress("[7/8] Gentzkow-Shapiro slant index...");
+      setProgress("[6/9] Entman framing analysis...");
       await new Promise(r => setTimeout(r, 50));
-      const gentzkowShapiro = analyzeGentzkowShapiro(plainText);
+      const entman = safe("entman", () => analyzeEntmanFraming(plainText)) || { score: 0, leftScore: 0, rightScore: 0, details: {left:{problem:0,causal:0,moral:0,solution:0},right:{problem:0,causal:0,moral:0,solution:0}}, label: "N/A" };
 
-      setProgress("[8/8] Van Dijk & Fairclough analysis...");
+      setProgress("[7/9] Gentzkow-Shapiro slant index...");
       await new Promise(r => setTimeout(r, 50));
-      const vanDijk = analyzeVanDijk(plainText);
-      const fairclough = analyzeFairlough(plainText);
+      const gentzkowShapiro = safe("gentzkowShapiro", () => analyzeGentzkowShapiro(plainText)) || { score: 0, leftCount: 0, rightCount: 0, total: 0, leftFound: [], rightFound: [], label: "N/A" };
 
+      setProgress("[8/9] Van Dijk ideological analysis...");
+      await new Promise(r => setTimeout(r, 50));
+      const vanDijk = safe("vanDijk", () => analyzeVanDijk(plainText)) || { score: 0, polarization: 0, usPositive: 0, usNegative: 0, themPositive: 0, themNegative: 0, totalMarkers: 0, label: "N/A" };
+
+      setProgress("[9/9] Fairclough discourse analysis...");
+      await new Promise(r => setTimeout(r, 50));
+      const fairclough = safe("fairclough", () => analyzeFairlough(plainText)) || { score: 0, passiveRatio: 0, nomRatio: 0, modalityBalance: 0, presupCount: 0, evalDensity: 0, highCertaintyCount: 0, lowCertaintyCount: 0, passiveCount: 0, nomCount: 0, evalCount: 0, label: "N/A" };
+
+      console.log("[WBA] All analyses complete, rendering results...");
       setResults({ sourceBias, policy, sentiment, structure, lexical, entman, gentzkowShapiro, vanDijk, fairclough, wordCount, sectionCount: Object.keys(sections).length, title: actualTitle, sections, plainText });
     } catch (e) {
       setResults({ error: e.message });
@@ -1821,7 +1862,7 @@ function WikiBiasAnalyzer() {
   );
 }
 
-ReactDOM.render(<WikiBiasAnalyzer />, document.getElementById("root"));
+ReactDOM.render(<ErrorBoundary><WikiBiasAnalyzer /></ErrorBoundary>, document.getElementById("root"));
 </script>
 </body>
 </html>
