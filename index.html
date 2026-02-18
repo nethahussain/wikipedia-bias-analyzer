@@ -1452,6 +1452,8 @@ function WikiBiasAnalyzer() {
   const [progress, setProgress] = useState("");
   const [results, setResults] = useState(null);
   const [articleTitle, setArticleTitle] = useState("");
+  const [redirectInfo, setRedirectInfo] = useState(null);
+  const [disambigLinks, setDisambigLinks] = useState(null);
   const inputRef = useRef(null);
   const timerRef = useRef(null);
 
@@ -1475,14 +1477,23 @@ function WikiBiasAnalyzer() {
   const analyze = async (title) => {
     setLoading(true);
     setResults(null);
+    setRedirectInfo(null);
+    setDisambigLinks(null);
     setArticleTitle(title);
     setShowSuggestions(false);
     setQuery(title);
     try {
       setProgress("Fetching article from Wikipedia...");
-      const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=revisions&rvprop=content&rvslots=main&format=json&origin=*`;
+      const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=revisions&rvprop=content&rvslots=main&redirects=1&format=json&origin=*`;
       const res = await fetch(url);
       const data = await res.json();
+
+      // Detect redirect
+      if (data.query.redirects && data.query.redirects.length > 0) {
+        const rd = data.query.redirects[0];
+        setRedirectInfo({ from: rd.from, to: rd.to });
+      }
+
       const pages = data?.query?.pages;
       if (!pages) throw new Error("Article not found");
       const page = Object.values(pages)[0];
@@ -1490,6 +1501,29 @@ function WikiBiasAnalyzer() {
       const wikitext = page.revisions[0].slots.main["*"];
       const actualTitle = page.title;
       setArticleTitle(actualTitle);
+
+      // Detect disambiguation page
+      const isDisambig = /\{\{(disambig|disambiguation|dab|hndis|geodis|numberdis|letter-number combo dis|ship index|airport dis|surname|given name)[|\s\}]/i.test(wikitext);
+      if (isDisambig) {
+        // Extract all wikilinks as candidate articles
+        const linkRegex = /\[\[([^\]|#]+)(?:\|[^\]]*)?]]/g;
+        const links = [];
+        const seen = new Set();
+        let lm;
+        while ((lm = linkRegex.exec(wikitext)) !== null) {
+          const link = lm[1].trim();
+          // Skip meta/category/file links
+          if (/^(File|Image|Category|Wikipedia|WP|Template|Help|Portal|Draft):/i.test(link)) continue;
+          if (!seen.has(link.toLowerCase())) {
+            seen.add(link.toLowerCase());
+            links.push(link);
+          }
+        }
+        setDisambigLinks(links);
+        setLoading(false);
+        setProgress("");
+        return;
+      }
 
       setProgress("Parsing article structure...");
       await new Promise(r => setTimeout(r, 50));
@@ -1601,6 +1635,39 @@ function WikiBiasAnalyzer() {
     );
   }
 
+  // ─── DISAMBIGUATION ───
+  if (disambigLinks && disambigLinks.length > 0) {
+    return (
+      <div className="center-page">
+        <div style={{maxWidth:"600px",width:"100%",display:"flex",flexDirection:"column",gap:"20px"}}>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:"14px",color:"#8b572a",background:"#fef3e2",border:"1px solid #f5d9a8",padding:"10px 16px",marginBottom:"20px",fontFamily:"'Source Sans 3', sans-serif"}}>
+              <strong>{articleTitle}</strong> is a disambiguation page — it lists multiple articles that share this title.
+            </div>
+            <h2 style={{fontSize:"22px",fontWeight:700,color:"#33302e",fontFamily:"'Playfair Display', serif"}}>Which article did you mean?</h2>
+            <p style={{color:"#66605c",fontSize:"14px",marginTop:"6px"}}>Select one to analyze:</p>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:"6px",maxHeight:"400px",overflowY:"auto",padding:"4px"}}>
+            {disambigLinks.map((link, i) => (
+              <button key={i} onClick={() => analyze(link)} style={{
+                textAlign:"left",padding:"10px 16px",background:"#fff",border:"1px solid #e8e4df",
+                cursor:"pointer",fontSize:"14px",color:"#33302e",fontFamily:"'Source Sans 3', sans-serif",
+                transition:"background 0.15s"
+              }}
+              onMouseEnter={e => e.target.style.background="#f8f5f0"}
+              onMouseLeave={e => e.target.style.background="#fff"}>
+                {link}
+              </button>
+            ))}
+          </div>
+          <div style={{textAlign:"center"}}>
+            <button className="btn-secondary" onClick={() => { setDisambigLinks(null); setResults(null); setQuery(""); }}>Back to Search</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ─── ERROR ───
   if (r.error) {
     return (
@@ -1630,6 +1697,14 @@ function WikiBiasAnalyzer() {
         </div>
         <button className="btn-secondary" onClick={() => { setResults(null); setQuery(""); }}>New Analysis</button>
       </div>
+
+      {/* Redirect notice */}
+      {redirectInfo && (
+        <div style={{background:"#f0f7ff",border:"1px solid #b8d4f0",padding:"10px 16px",fontSize:"13px",color:"#1e4a7a",fontFamily:"'Source Sans 3', sans-serif",display:"flex",alignItems:"center",gap:"8px"}}>
+          <span style={{fontSize:"16px"}}>&#8594;</span>
+          <span><strong>{redirectInfo.from}</strong> redirects to <strong>{redirectInfo.to}</strong></span>
+        </div>
+      )}
 
       {/* Multi-Framework Scoring Table */}
       <FrameworkScoreTable results={r} />
