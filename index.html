@@ -679,6 +679,169 @@ function analyzeLexical(plainText) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// FRAMEWORK SCORING — Entman, Van Dijk, Gentzkow-Shapiro, Fairclough
+// ═══════════════════════════════════════════════════════════════════
+
+// ── Entman Framing (1993): Salience of problem/cause/moral/solution frames ──
+const ENTMAN_LEFT_FRAMES = {
+  problem: ["inequality","injustice","crisis","systemic","discrimination","exploitation","oppression","marginalized","disenfranchised","underrepresented","disparity","poverty","racism","sexism","xenophobia","homophobia","imperialism","colonialism","gentrification","austerity"],
+  causal: ["corporate greed","systemic racism","deregulation","lack of funding","structural barriers","wealth gap","lobbying","corruption","capitalism","neoliberal","trickle-down","market failure","privatization"],
+  moral: ["exploitative","discriminatory","unjust","unequal","inhumane","unconscionable","shameful","egregious","reprehensible","deplorable","harmful","toxic","oppressive"],
+  solution: ["regulate","redistribute","invest in","public funding","social safety net","universal","equity","inclusion","reparation","progressive tax","living wage","collective bargaining","nationalize","subsidize"]
+};
+const ENTMAN_RIGHT_FRAMES = {
+  problem: ["government overreach","wasteful spending","bureaucracy","dependency","illegal immigration","moral decline","lawlessness","socialism","radicalism","indoctrination","elitism","cancel culture","woke","political correctness"],
+  causal: ["big government","welfare dependency","excessive regulation","high taxes","open borders","activist judges","liberal media","nanny state","entitlement mentality","union demands"],
+  moral: ["irresponsible","wasteful","unconstitutional","un-american","radical","dangerous","reckless","unpatriotic","lawless","entitled","godless"],
+  solution: ["deregulate","cut taxes","reduce government","personal responsibility","free market","privatize","secure borders","law and order","school choice","states rights","second amendment","protect liberty","traditional values"]
+};
+
+function analyzeEntmanFraming(plainText) {
+  const lower = plainText.toLowerCase();
+  let leftScore = 0, rightScore = 0;
+  const weights = { problem: 1.0, causal: 1.2, moral: 1.5, solution: 1.0 };
+  const details = { left: {}, right: {} };
+  for (const [cat, phrases] of Object.entries(ENTMAN_LEFT_FRAMES)) {
+    let count = 0;
+    for (const p of phrases) { const re = new RegExp("\\b" + p.replace(/\s+/g, "\\s+") + "\\b", "gi"); const m = lower.match(re); if (m) count += m.length; }
+    details.left[cat] = count;
+    leftScore += count * weights[cat];
+  }
+  for (const [cat, phrases] of Object.entries(ENTMAN_RIGHT_FRAMES)) {
+    let count = 0;
+    for (const p of phrases) { const re = new RegExp("\\b" + p.replace(/\s+/g, "\\s+") + "\\b", "gi"); const m = lower.match(re); if (m) count += m.length; }
+    details.right[cat] = count;
+    rightScore += count * weights[cat];
+  }
+  const total = leftScore + rightScore;
+  const score = total > 0 ? +((leftScore - rightScore) / total).toFixed(3) : 0;
+  return { score, leftScore: +leftScore.toFixed(1), rightScore: +rightScore.toFixed(1), details, label: score > 0.3 ? "Left" : score > 0.1 ? "Moderate Left" : score < -0.3 ? "Right" : score < -0.1 ? "Moderate Right" : "Near Neutral" };
+}
+
+// ── Van Dijk Ideological Square (1998): Us/Them polarization ──
+const POSITIVE_DESCRIPTORS = ["democratic","freedom","liberty","innovation","progress","prosperity","security","justice","equality","fairness","compassion","brave","courageous","principled","responsible","legitimate","peaceful","stable","civilized","advanced","protective","heroic","visionary","dedicated","transparent"];
+const NEGATIVE_DESCRIPTORS = ["corrupt","reckless","dangerous","dishonest","destructive","extremist","radical","authoritarian","tyrannical","barbaric","threatening","aggressive","incompetent","illegitimate","destabilizing","violent","backward","repressive","deceitful","manipulative","fanatical","hostile","divisive","rogue"];
+const US_MARKERS = ["we","our","us","ourselves","our country","our nation","our people","our society","the people","citizens","allies","the west","western","homeland","domestic","national"];
+const THEM_MARKERS = ["they","their","them","those","enemy","enemies","opponents","adversaries","foreigners","outsiders","regime","militant","insurgent","terrorist","extremist","alien","invader"];
+
+function analyzeVanDijk(plainText) {
+  const lower = plainText.toLowerCase();
+  const sentences = plainText.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  let usPositive = 0, usNegative = 0, themPositive = 0, themNegative = 0;
+  for (const sent of sentences) {
+    const sl = sent.toLowerCase();
+    const hasUs = US_MARKERS.some(m => new RegExp("\\b" + m + "\\b", "i").test(sl));
+    const hasThem = THEM_MARKERS.some(m => new RegExp("\\b" + m + "\\b", "i").test(sl));
+    const posCount = POSITIVE_DESCRIPTORS.filter(w => new RegExp("\\b" + w + "\\b", "i").test(sl)).length;
+    const negCount = NEGATIVE_DESCRIPTORS.filter(w => new RegExp("\\b" + w + "\\b", "i").test(sl)).length;
+    if (hasUs) { usPositive += posCount; usNegative += negCount; }
+    if (hasThem) { themPositive += posCount; themNegative += negCount; }
+  }
+  const idealSquare = (usPositive + themNegative) - (usNegative + themPositive);
+  const total = usPositive + usNegative + themPositive + themNegative;
+  const score = total > 0 ? +(idealSquare / total).toFixed(3) : 0;
+  const polarization = total > 0 ? +((usPositive + themNegative) / total).toFixed(3) : 0;
+  return {
+    score, polarization, usPositive, usNegative, themPositive, themNegative, totalMarkers: total,
+    label: Math.abs(score) < 0.1 ? "Balanced" : Math.abs(score) < 0.3 ? "Moderate Polarization" : "High Polarization"
+  };
+}
+
+// ── Gentzkow-Shapiro Slant (2010): Partisan phrase frequency ──
+const PARTISAN_LEFT = [
+  "estate tax","climate change","gun violence","gun safety","reproductive rights","reproductive freedom","undocumented immigrants","undocumented workers","affordable care act","marriage equality","income inequality","wealth gap","racial justice","social justice","systemic racism","voter suppression","living wage","workers rights","collective bargaining","public option","single payer","universal healthcare","green new deal","assault weapons","common sense gun","racial profiling","mass incarceration","clean energy","renewable energy","carbon emissions","fossil fuel","gender pay gap","wage theft","predatory lending","food insecurity","housing crisis","police brutality","white supremacy","white nationalism","glass ceiling","indigenous peoples","environmental justice","intersectionality","microaggression","cultural appropriation","disinformation","misinformation","dark money","corporate welfare"
+];
+const PARTISAN_RIGHT = [
+  "death tax","energy independence","second amendment","right to bear arms","pro-life","unborn children","illegal aliens","illegal immigrants","obamacare","traditional marriage","free market","job creators","job killing","religious liberty","religious freedom","law and order","personal responsibility","welfare reform","government overreach","school choice","right to work","tax relief","tax burden","fiscal responsibility","national defense","border security","secure the border","radical left","liberal elite","deep state","big government","entitlement reform","government waste","taxpayer dollars","hard working americans","family values","american exceptionalism","political correctness","cancel culture","woke","virtue signaling","mainstream media","fake news","judicial activism","activist judges","states rights","god given rights","founding fathers","constitutional rights","sanctity of life"
+];
+
+function analyzeGentzkowShapiro(plainText) {
+  const lower = plainText.toLowerCase();
+  let leftCount = 0, rightCount = 0;
+  const leftFound = [], rightFound = [];
+  for (const phrase of PARTISAN_LEFT) {
+    const re = new RegExp("\\b" + phrase.replace(/\s+/g, "\\s+") + "\\b", "gi");
+    const m = lower.match(re);
+    if (m) { leftCount += m.length; leftFound.push({ phrase, count: m.length }); }
+  }
+  for (const phrase of PARTISAN_RIGHT) {
+    const re = new RegExp("\\b" + phrase.replace(/\s+/g, "\\s+") + "\\b", "gi");
+    const m = lower.match(re);
+    if (m) { rightCount += m.length; rightFound.push({ phrase, count: m.length }); }
+  }
+  const total = leftCount + rightCount;
+  const score = total > 0 ? +((leftCount - rightCount) / total).toFixed(3) : 0;
+  return {
+    score, leftCount, rightCount, total,
+    leftFound: leftFound.sort((a, b) => b.count - a.count).slice(0, 10),
+    rightFound: rightFound.sort((a, b) => b.count - a.count).slice(0, 10),
+    label: score > 0.3 ? "Left" : score > 0.1 ? "Moderate Left" : score < -0.3 ? "Right" : score < -0.1 ? "Moderate Right" : "Near Neutral"
+  };
+}
+
+// ── Fairclough CDA (1995): Linguistic power/ideology markers ──
+function analyzeFairlough(plainText) {
+  const words = plainText.split(/\s+/);
+  const wc = words.length;
+  if (!wc) return { score: 0, label: "N/A" };
+
+  // 1. Passive voice ratio (obscures agency)
+  const passiveRe = /\b(?:was|were|been|being|is|are|has been|have been|had been)\s+(?:\w+ly\s+)?(?:\w+ed|made|done|seen|known|shown|held|told|found|built|sent|left|lost|kept|set|given|taken|brought|thought|said|written|broken|chosen|spoken|driven|forgotten|hidden|risen|shaken|stolen|sworn|torn|worn|born|drawn|grown|thrown|woken)\b/gi;
+  const passiveCount = (plainText.match(passiveRe) || []).length;
+  const passiveRatio = passiveCount / (wc / 100);
+
+  // 2. Nominalization (converting processes to things — obscures agency)
+  const nomSuffixes = /\b\w{4,}(?:tion|sion|ment|ness|ance|ence|ity|ism|ist|age)\b/gi;
+  const nomCount = (plainText.match(nomSuffixes) || []).length;
+  const nomRatio = nomCount / (wc / 100);
+
+  // 3. Modality — hedging vs assertive (epistemic stance)
+  const highCertainty = ["must","certainly","definitely","undoubtedly","clearly","obviously","absolutely","inevitably","unquestionably","always","never"];
+  const lowCertainty = ["may","might","could","possibly","perhaps","arguably","seemingly","apparently","allegedly","reportedly","supposedly","presumably"];
+  let highCount = 0, lowCount = 0;
+  for (const w of highCertainty) { const re = new RegExp("\\b" + w + "\\b", "gi"); highCount += (plainText.match(re) || []).length; }
+  for (const w of lowCertainty) { const re = new RegExp("\\b" + w + "\\b", "gi"); lowCount += (plainText.match(re) || []).length; }
+  const modalityBalance = (highCount + lowCount) > 0 ? (highCount - lowCount) / (highCount + lowCount) : 0;
+
+  // 4. Presupposition triggers (present assumptions as fact)
+  const presupTriggers = ["the fact that","it is clear that","it is obvious that","it is well known","everyone knows","as we all know","of course","naturally","needless to say","it goes without saying","given that","since"];
+  let presupCount = 0;
+  for (const p of presupTriggers) { const re = new RegExp(p.replace(/\s+/g, "\\s+"), "gi"); presupCount += (plainText.match(re) || []).length; }
+
+  // 5. Evaluative adjectives (value-laden language)
+  const evalAdj = ["important","significant","crucial","essential","vital","remarkable","extraordinary","notable","profound","exceptional","controversial","problematic","alarming","dangerous","threatening","devastating","disastrous","unprecedented","historic","revolutionary","progressive","regressive","radical","moderate","extreme"];
+  let evalCount = 0;
+  for (const w of evalAdj) { const re = new RegExp("\\b" + w + "\\b", "gi"); evalCount += (plainText.match(re) || []).length; }
+  const evalDensity = evalCount / (wc / 1000);
+
+  // Composite CDA score: higher = more ideologically loaded language
+  // Normalize each component to 0-1, then average
+  const passiveNorm = Math.min(passiveRatio / 5, 1);
+  const nomNorm = Math.min(nomRatio / 15, 1);
+  const modalNorm = (modalityBalance + 1) / 2; // -1..1 → 0..1
+  const presupNorm = Math.min(presupCount / (wc / 2000), 1);
+  const evalNorm = Math.min(evalDensity / 20, 1);
+
+  const composite = +(((passiveNorm + nomNorm + modalNorm + presupNorm + evalNorm) / 5) * 2 - 1).toFixed(3);
+  // Scale: -1 (highly transparent/neutral) to +1 (highly ideological/loaded)
+
+  return {
+    score: composite,
+    passiveRatio: +passiveRatio.toFixed(2),
+    nomRatio: +nomRatio.toFixed(2),
+    modalityBalance: +modalityBalance.toFixed(3),
+    presupCount,
+    evalDensity: +evalDensity.toFixed(1),
+    highCertaintyCount: highCount,
+    lowCertaintyCount: lowCount,
+    passiveCount,
+    nomCount,
+    evalCount,
+    label: Math.abs(composite) < 0.15 ? "Neutral Discourse" : Math.abs(composite) < 0.35 ? "Moderate Ideology" : "Strong Ideology"
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // WIKITEXT PARSING
 // ═══════════════════════════════════════════════════════════════════
 
@@ -1111,6 +1274,100 @@ function SourceBiasSection({ sb, topSources, allClassified, allUnclassified }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// MULTI-FRAMEWORK SCORING TABLE
+// ═══════════════════════════════════════════════════════════════════
+
+function ScoreIndicator({ score, min = -1, max = 1 }) {
+  const range = max - min;
+  const pct = Math.max(0, Math.min(100, ((score - min) / range) * 100));
+  const centerPct = ((0 - min) / range) * 100;
+  const isPositive = score > 0;
+  const barLeft = isPositive ? centerPct : pct;
+  const barWidth = Math.abs(pct - centerPct);
+  const color = score > 0.3 ? "#082a75" : score > 0.1 ? "#2e6c9e" : score < -0.3 ? "#990f3d" : score < -0.1 ? "#c0392b" : "#66605c";
+  return (
+    <div style={{position:"relative",height:"20px",background:"#f0e6db",width:"100%",minWidth:"120px"}}>
+      <div style={{position:"absolute",left:`${centerPct}%`,top:0,bottom:0,width:"1px",background:"#66605c",zIndex:2}} />
+      <div style={{position:"absolute",left:`${barLeft}%`,top:"2px",bottom:"2px",width:`${barWidth}%`,background:color,transition:"all 0.3s"}} />
+    </div>
+  );
+}
+
+function FrameworkScoreTable({ results: r }) {
+  const [expanded, setExpanded] = useState(false);
+  const frameworks = [
+    { name: "VADER Sentiment", ref: "Hutto & Gilbert, 2014", score: r.sentiment.mean, label: r.sentiment.mean > 0.1 ? "Positive" : r.sentiment.mean < -0.1 ? "Negative" : "Neutral", desc: "Lexicon-based sentiment scoring using ~1,200 rated words. Measures emotional tone, not political leaning." },
+    { name: "Entman Framing", ref: "Entman, 1993", score: r.entman.score, label: r.entman.label, desc: "Detects problem/causal/moral/solution frames associated with left vs right political discourse." },
+    { name: "Van Dijk Ideological Square", ref: "Van Dijk, 1998", score: r.vanDijk.score, label: r.vanDijk.label, desc: "Measures Us/Them polarization: positive self-representation and negative other-representation." },
+    { name: "Gentzkow-Shapiro Slant", ref: "Gentzkow & Shapiro, 2010", score: r.gentzkowShapiro.score, label: r.gentzkowShapiro.label, desc: "Counts partisan phrases characteristic of Democratic (+) vs Republican (-) congressional speech." },
+    { name: "Fairclough CDA", ref: "Fairclough, 1995", score: r.fairclough.score, label: r.fairclough.label, desc: "Critical discourse analysis: passive voice, nominalization, modality, presupposition, evaluative language." },
+  ];
+  const avg = +(frameworks.reduce((s, f) => s + f.score, 0) / frameworks.length).toFixed(3);
+
+  return (
+    <div className="card">
+      <button className="section-header" onClick={() => setExpanded(!expanded)}>
+        <span className="section-icon">{"\uD83D\uDCCA"}</span>
+        <span className="section-title">Multi-Framework Bias Scorecard</span>
+        <span className="section-toggle">{expanded ? "\u25B2" : "\u25BC"}</span>
+      </button>
+      <div className="section-body">
+        <p className="desc">Five peer-reviewed frameworks applied independently. All scores are deterministic and rule-based. Scale: -1.0 (Right) to +1.0 (Left/Loaded). Average: <strong>{avg > 0 ? "+" : ""}{avg}</strong></p>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:"14px",fontFamily:"'Source Sans 3', sans-serif"}}>
+            <thead>
+              <tr style={{borderBottom:"2px solid #33302e",textAlign:"left"}}>
+                <th style={{padding:"8px 12px",fontWeight:700,color:"#33302e",width:"200px"}}>Framework</th>
+                <th style={{padding:"8px 12px",fontWeight:700,color:"#33302e",width:"70px",textAlign:"right"}}>Score</th>
+                <th style={{padding:"8px 12px",fontWeight:700,color:"#33302e"}}>Direction</th>
+                <th style={{padding:"8px 12px",fontWeight:700,color:"#33302e",minWidth:"120px"}}>Spectrum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {frameworks.map((f, i) => (
+                <tr key={i} style={{borderBottom:"1px solid #e8d5c4"}}>
+                  <td style={{padding:"10px 12px"}}>
+                    <div style={{fontWeight:600,color:"#33302e"}}>{f.name}</div>
+                    <div style={{fontSize:"11px",color:"#a39d97",fontStyle:"italic"}}>{f.ref}</div>
+                  </td>
+                  <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,fontFamily:"'Source Sans 3', monospace",fontSize:"15px",color: f.score > 0.1 ? "#082a75" : f.score < -0.1 ? "#990f3d" : "#66605c"}}>
+                    {f.score > 0 ? "+" : ""}{f.score.toFixed(3)}
+                  </td>
+                  <td style={{padding:"10px 12px",color:"#66605c"}}>{f.label}</td>
+                  <td style={{padding:"10px 12px"}}><ScoreIndicator score={f.score} /></td>
+                </tr>
+              ))}
+              <tr style={{borderTop:"2px solid #33302e",background:"#f6e9d8"}}>
+                <td style={{padding:"10px 12px",fontWeight:700}}>Composite Average</td>
+                <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,fontFamily:"monospace",fontSize:"15px",color: avg > 0.1 ? "#082a75" : avg < -0.1 ? "#990f3d" : "#66605c"}}>{avg > 0 ? "+" : ""}{avg}</td>
+                <td style={{padding:"10px 12px",fontWeight:600,color:"#66605c"}}>{avg > 0.3 ? "Left" : avg > 0.1 ? "Moderate Left" : avg < -0.3 ? "Right" : avg < -0.1 ? "Moderate Right" : "Near Neutral"}</td>
+                <td style={{padding:"10px 12px"}}><ScoreIndicator score={avg} /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {expanded && (
+          <div style={{marginTop:"16px",display:"flex",flexDirection:"column",gap:"12px"}}>
+            {frameworks.map((f, i) => (
+              <div key={i} style={{padding:"12px",background:"#fff",border:"1px solid #e8d5c4",fontSize:"13px"}}>
+                <div style={{fontWeight:700,marginBottom:"4px",color:"#33302e"}}>{f.name}</div>
+                <div style={{color:"#66605c",lineHeight:1.6}}>{f.desc}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <button onClick={() => setExpanded(!expanded)} style={{
+          marginTop:"10px",background:"none",border:"1px solid #ccc1b7",
+          padding:"8px 14px",fontSize:"13px",color:"#33302e",cursor:"pointer",width:"100%",fontFamily:"'Source Sans 3', sans-serif"
+        }}>
+          {expanded ? "\u25B2 Hide framework details" : "\u25BC Show framework details"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════
 
@@ -1183,11 +1440,24 @@ function WikiBiasAnalyzer() {
       await new Promise(r => setTimeout(r, 50));
       const structure = analyzeStructure(sections, wikitext);
 
-      setProgress("[5/5] Running lexical analysis...");
+      setProgress("[5/8] Running lexical analysis...");
       await new Promise(r => setTimeout(r, 50));
       const lexical = analyzeLexical(plainText);
 
-      setResults({ sourceBias, policy, sentiment, structure, lexical, wordCount, sectionCount: Object.keys(sections).length, title: actualTitle, sections, plainText });
+      setProgress("[6/8] Entman framing analysis...");
+      await new Promise(r => setTimeout(r, 50));
+      const entman = analyzeEntmanFraming(plainText);
+
+      setProgress("[7/8] Gentzkow-Shapiro slant index...");
+      await new Promise(r => setTimeout(r, 50));
+      const gentzkowShapiro = analyzeGentzkowShapiro(plainText);
+
+      setProgress("[8/8] Van Dijk & Fairclough analysis...");
+      await new Promise(r => setTimeout(r, 50));
+      const vanDijk = analyzeVanDijk(plainText);
+      const fairclough = analyzeFairlough(plainText);
+
+      setResults({ sourceBias, policy, sentiment, structure, lexical, entman, gentzkowShapiro, vanDijk, fairclough, wordCount, sectionCount: Object.keys(sections).length, title: actualTitle, sections, plainText });
     } catch (e) {
       setResults({ error: e.message });
     }
@@ -1286,6 +1556,9 @@ function WikiBiasAnalyzer() {
         <button className="btn-secondary" onClick={() => { setResults(null); setQuery(""); }}>New Analysis</button>
       </div>
 
+      {/* Multi-Framework Scoring Table */}
+      <FrameworkScoreTable results={r} />
+
       {/* Module 1: Source Bias */}
       <SourceBiasSection sb={sb} topSources={topSources} allClassified={allClassified} allUnclassified={allUnclassified} />
 
@@ -1369,13 +1642,118 @@ function WikiBiasAnalyzer() {
         <MetricBar label="Passive Voice" value={r.lexical.passive?.density || 0} max={30} color="#64748b" suffix="/1k" />
       </Section>
 
-      {/* Module 6: LLM Analysis */}
+      {/* Module 6: Entman Framing */}
+      <Section title="Entman Framing Analysis" icon={"\uD83D\uDDBC\uFE0F"} defaultOpen={false}>
+        <p className="desc"><a href="https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1460-2466.1993.tb01304.x" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Entman (1993)</a>: Identifies problem/causal/moral/solution frames associated with left vs right political discourse. Score: {r.entman.score > 0 ? "+" : ""}{r.entman.score} ({r.entman.label})</p>
+        <div className="stats-grid stats-4">
+          <Stat label="Score" value={(r.entman.score > 0 ? "+" : "") + r.entman.score.toFixed(3)} sub={r.entman.label} />
+          <Stat label="Left Frames" value={r.entman.leftScore} />
+          <Stat label="Right Frames" value={r.entman.rightScore} />
+          <Stat label="Total" value={+(r.entman.leftScore + r.entman.rightScore).toFixed(1)} />
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginTop:"8px"}}>
+          <div style={{background:"#eef0f8",padding:"10px",fontSize:"13px"}}>
+            <div style={{fontWeight:700,color:"#082a75",marginBottom:"4px"}}>Left Frames</div>
+            {Object.entries(r.entman.details.left).filter(([,v])=>v>0).map(([cat,count])=>(
+              <div key={cat} style={{display:"flex",justifyContent:"space-between"}}><span style={{textTransform:"capitalize"}}>{cat}</span><span style={{fontWeight:600}}>{count}</span></div>
+            ))}
+            {Object.values(r.entman.details.left).every(v=>v===0) && <div style={{color:"#a39d97",fontStyle:"italic"}}>None detected</div>}
+          </div>
+          <div style={{background:"#fdf0ee",padding:"10px",fontSize:"13px"}}>
+            <div style={{fontWeight:700,color:"#990f3d",marginBottom:"4px"}}>Right Frames</div>
+            {Object.entries(r.entman.details.right).filter(([,v])=>v>0).map(([cat,count])=>(
+              <div key={cat} style={{display:"flex",justifyContent:"space-between"}}><span style={{textTransform:"capitalize"}}>{cat}</span><span style={{fontWeight:600}}>{count}</span></div>
+            ))}
+            {Object.values(r.entman.details.right).every(v=>v===0) && <div style={{color:"#a39d97",fontStyle:"italic"}}>None detected</div>}
+          </div>
+        </div>
+      </Section>
+
+      {/* Module 7: Gentzkow-Shapiro */}
+      <Section title="Gentzkow-Shapiro Slant Index" icon={"\uD83C\uDFDB\uFE0F"} defaultOpen={false}>
+        <p className="desc"><a href="https://web.stanford.edu/~gentzkow/research/biasmeas.pdf" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Gentzkow &amp; Shapiro (2010)</a>: Measures political slant via phrase frequency similarity to Democratic (+) vs Republican (-) congressional speech patterns.</p>
+        <div className="stats-grid stats-4">
+          <Stat label="Slant Score" value={(r.gentzkowShapiro.score > 0 ? "+" : "") + r.gentzkowShapiro.score.toFixed(3)} sub={r.gentzkowShapiro.label} />
+          <Stat label="Dem Phrases" value={r.gentzkowShapiro.leftCount} />
+          <Stat label="GOP Phrases" value={r.gentzkowShapiro.rightCount} />
+          <Stat label="Total" value={r.gentzkowShapiro.total} />
+        </div>
+        {(r.gentzkowShapiro.leftFound.length > 0 || r.gentzkowShapiro.rightFound.length > 0) && (
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginTop:"8px"}}>
+            <div style={{background:"#eef0f8",padding:"10px",fontSize:"13px"}}>
+              <div style={{fontWeight:700,color:"#082a75",marginBottom:"4px"}}>Democratic-Leaning Phrases</div>
+              {r.gentzkowShapiro.leftFound.map(({phrase,count})=>(
+                <div key={phrase} style={{display:"flex",justifyContent:"space-between"}}><span>"{phrase}"</span><span style={{fontWeight:600}}>{count}</span></div>
+              ))}
+              {r.gentzkowShapiro.leftFound.length === 0 && <div style={{color:"#a39d97",fontStyle:"italic"}}>None detected</div>}
+            </div>
+            <div style={{background:"#fdf0ee",padding:"10px",fontSize:"13px"}}>
+              <div style={{fontWeight:700,color:"#990f3d",marginBottom:"4px"}}>Republican-Leaning Phrases</div>
+              {r.gentzkowShapiro.rightFound.map(({phrase,count})=>(
+                <div key={phrase} style={{display:"flex",justifyContent:"space-between"}}><span>"{phrase}"</span><span style={{fontWeight:600}}>{count}</span></div>
+              ))}
+              {r.gentzkowShapiro.rightFound.length === 0 && <div style={{color:"#a39d97",fontStyle:"italic"}}>None detected</div>}
+            </div>
+          </div>
+        )}
+        {r.gentzkowShapiro.total === 0 && <div style={{padding:"12px",background:"#f6e9d8",color:"#66605c",fontSize:"13px",fontStyle:"italic"}}>No partisan phrases detected. Wikipedia articles often use neutral language that avoids partisan framing.</div>}
+      </Section>
+
+      {/* Module 8: Van Dijk */}
+      <Section title="Van Dijk Ideological Square" icon={"\u2B1C"} defaultOpen={false}>
+        <p className="desc"><a href="https://en.wikipedia.org/wiki/Teun_A._van_Dijk" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Van Dijk (1998)</a>: Measures Us/Them polarization by tracking positive/negative descriptors applied to in-group vs out-group references.</p>
+        <div className="stats-grid stats-4">
+          <Stat label="Polarization" value={(r.vanDijk.score > 0 ? "+" : "") + r.vanDijk.score.toFixed(3)} sub={r.vanDijk.label} />
+          <Stat label="Us+ / Us-" value={`${r.vanDijk.usPositive} / ${r.vanDijk.usNegative}`} />
+          <Stat label="Them+ / Them-" value={`${r.vanDijk.themPositive} / ${r.vanDijk.themNegative}`} />
+          <Stat label="Total Markers" value={r.vanDijk.totalMarkers} />
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1px",background:"#e8d5c4",marginTop:"12px"}}>
+          <div style={{background:"#e8f5e9",padding:"12px",textAlign:"center"}}>
+            <div style={{fontSize:"11px",color:"#66605c",textTransform:"uppercase",letterSpacing:"0.05em"}}>Emphasize Us+</div>
+            <div style={{fontSize:"24px",fontWeight:700,color:"#2e7d32"}}>{r.vanDijk.usPositive}</div>
+          </div>
+          <div style={{background:"#fce4ec",padding:"12px",textAlign:"center"}}>
+            <div style={{fontSize:"11px",color:"#66605c",textTransform:"uppercase",letterSpacing:"0.05em"}}>Emphasize Them-</div>
+            <div style={{fontSize:"24px",fontWeight:700,color:"#c62828"}}>{r.vanDijk.themNegative}</div>
+          </div>
+          <div style={{background:"#fff3e0",padding:"12px",textAlign:"center"}}>
+            <div style={{fontSize:"11px",color:"#66605c",textTransform:"uppercase",letterSpacing:"0.05em"}}>Mitigate Us-</div>
+            <div style={{fontSize:"24px",fontWeight:700,color:"#e65100"}}>{r.vanDijk.usNegative}</div>
+          </div>
+          <div style={{background:"#e3f2fd",padding:"12px",textAlign:"center"}}>
+            <div style={{fontSize:"11px",color:"#66605c",textTransform:"uppercase",letterSpacing:"0.05em"}}>Mitigate Them+</div>
+            <div style={{fontSize:"24px",fontWeight:700,color:"#1565c0"}}>{r.vanDijk.themPositive}</div>
+          </div>
+        </div>
+      </Section>
+
+      {/* Module 9: Fairclough CDA */}
+      <Section title="Fairclough Critical Discourse Analysis" icon={"\uD83D\uDD0D"} defaultOpen={false}>
+        <p className="desc"><a href="https://en.wikipedia.org/wiki/Critical_discourse_analysis" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Fairclough (1995)</a>: Analyzes how linguistic choices construct power and ideology. Higher scores = more ideologically loaded language.</p>
+        <div className="stats-grid stats-4">
+          <Stat label="CDA Score" value={(r.fairclough.score > 0 ? "+" : "") + r.fairclough.score.toFixed(3)} sub={r.fairclough.label} />
+          <Stat label="Passive Voice" value={r.fairclough.passiveCount} sub={`${r.fairclough.passiveRatio}/100w`} />
+          <Stat label="Nominalizations" value={r.fairclough.nomCount} sub={`${r.fairclough.nomRatio}/100w`} />
+          <Stat label="Evaluative" value={r.fairclough.evalCount} sub={`${r.fairclough.evalDensity}/1k`} />
+        </div>
+        <MetricBar label="Passive Voice" value={r.fairclough.passiveRatio} max={8} color="#6366f1" suffix="/100w" />
+        <MetricBar label="Nominalization" value={r.fairclough.nomRatio} max={20} color="#8b5cf6" suffix="/100w" />
+        <MetricBar label="Evaluative Language" value={r.fairclough.evalDensity} max={25} color="#f59e0b" suffix="/1k" />
+        <MetricBar label="Presuppositions" value={r.fairclough.presupCount} max={20} color="#ef4444" suffix=" total" />
+        <div style={{marginTop:"8px",fontSize:"13px",color:"#66605c"}}>
+          <strong>Modality Balance:</strong> {r.fairclough.highCertaintyCount} high-certainty vs {r.fairclough.lowCertaintyCount} low-certainty markers
+          ({r.fairclough.modalityBalance > 0 ? "assertive" : r.fairclough.modalityBalance < 0 ? "hedged" : "balanced"} discourse)
+        </div>
+      </Section>
+
+      {/* Module 10: LLM Analysis */}
       <LLMAnalysisSection plainText={r.plainText} title={r.title} />
 
       {/* Footer */}
       <div className="footer">
-        <p>Modules 1-5 are deterministic and rule-based. Same article always produces identical results.</p>
-        <p style={{marginTop:"4px"}}>Sources: <a href="https://www.allsides.com/media-bias/ratings" target="_blank" rel="noopener">AllSides Media Bias Ratings</a> | <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch" target="_blank" rel="noopener">Wikipedia WP:NPOV Word Lists</a> | <a href="https://github.com/cjhutto/vaderSentiment" target="_blank" rel="noopener">VADER Sentiment Lexicon</a> (Hutto &amp; Gilbert 2014)</p>
+        <p>Modules 1-9 are deterministic and rule-based. Same article always produces identical results.</p>
+        <p style={{marginTop:"4px"}}>Sources: <a href="https://www.allsides.com/media-bias/ratings" target="_blank" rel="noopener">AllSides Media Bias Ratings</a> | <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch" target="_blank" rel="noopener">Wikipedia WP:NPOV Word Lists</a> | <a href="https://github.com/cjhutto/vaderSentiment" target="_blank" rel="noopener">VADER Sentiment Lexicon</a> (Hutto &amp; Gilbert 2014) | <a href="https://web.stanford.edu/~gentzkow/research/biasmeas.pdf" target="_blank" rel="noopener">Gentzkow-Shapiro 2010</a></p>
       </div>
     </div>
   );
