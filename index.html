@@ -951,15 +951,30 @@ function SentimentBar({ name, data }) {
   );
 }
 
-function Section({ title, icon, children, defaultOpen = true }) {
+function Section({ title, icon, children, defaultOpen = true, sources }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [showSources, setShowSources] = useState(false);
   return (
     <div className="card">
       <button className="section-header" onClick={() => setOpen(!open)}>
         <span className="section-icon">{icon}</span>
         <span className="section-title">{title}</span>
+        {sources && (
+          <span onClick={e => { e.stopPropagation(); setShowSources(!showSources); }} title="View databases & sources consulted" style={{fontSize:"13px",color:"#0d7680",marginLeft:"8px",textDecoration:"underline",cursor:"pointer",fontWeight:400}}>{showSources ? "hide sources" : "sources"}</span>
+        )}
         <span className="section-toggle">{open ? "\u25B2" : "\u25BC"}</span>
       </button>
+      {showSources && sources && (
+        <div style={{background:"#f6f1eb",borderBottom:"1px solid #e8d5c4",padding:"12px 20px",fontSize:"13px",lineHeight:1.7}}>
+          <div style={{fontWeight:700,color:"#33302e",marginBottom:"6px",fontFamily:"'Playfair Display', serif",fontSize:"14px"}}>Databases &amp; Sources Consulted</div>
+          {sources.map((s, i) => (
+            <div key={i} style={{marginBottom:"4px",display:"flex",gap:"6px"}}>
+              <span style={{color:"#990f3d",fontWeight:700}}>{"\u2022"}</span>
+              <span>{s.url ? <a href={s.url} target="_blank" rel="noopener" style={{color:"#0d7680",textDecoration:"underline"}}>{s.name}</a> : <strong>{s.name}</strong>}{s.detail && <span style={{color:"#66605c"}}> — {s.detail}</span>}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {open && <div className="section-body">{children}</div>}
     </div>
   );
@@ -1016,7 +1031,12 @@ function PolicySection({ policy, sections }) {
   const [showText, setShowText] = useState(false);
 
   return (
-    <Section title="Wikipedia Policy Compliance" icon={"\uD83D\uDCCB"}>
+    <Section title="Wikipedia Policy Compliance" icon={"\uD83D\uDCCB"} sources={[
+      {name:"Wikipedia:Manual of Style/Words to watch",url:"https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch",detail:"Official Wikipedia word lists for weasel, peacock, and editorializing terms"},
+      {name:"WP:WEASEL — Unsupported attributions",url:"https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Unsupported_attributions",detail:"14 phrase patterns (e.g., 'some people say', 'it is believed', 'experts claim')"},
+      {name:"WP:PEACOCK — Puffery",url:"https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Puffery",detail:"11 superlative/promotional terms (e.g., 'legendary', 'renowned', 'prestigious')"},
+      {name:"WP:EDITORIALIZING",url:"https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Editorializing",detail:"10 opinion-marker phrases (e.g., 'of course', 'notably', 'it should be noted')"},
+    ]}>
       <p className="desc">Text scanned against Wikipedia's own <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Unsupported_attributions" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:WEASEL</a>, <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Puffery" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:PEACOCK</a>, and <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Editorializing" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:EDITORIALIZING</a> word lists.</p>
       <div className="stats-grid stats-4">
         <Stat label="Total Flags" value={policy.total.count} sub={`${policy.total.density}/1k words`} />
@@ -1169,7 +1189,12 @@ Be specific and cite examples from the text. Be balanced in your own assessment.
   };
 
   return (
-    <Section title="AI-Powered Analysis (Optional)" icon={"\uD83E\uDD16"} defaultOpen={false}>
+    <Section title="AI-Powered Analysis (Optional)" icon={"\uD83E\uDD16"} defaultOpen={false} sources={[
+      {name:"Google Gemini API",url:"https://aistudio.google.com/apikey",detail:"gemini-2.0-flash model via REST API"},
+      {name:"OpenAI API",url:"https://platform.openai.com/api-keys",detail:"gpt-4o-mini model"},
+      {name:"Anthropic API",url:"https://console.anthropic.com/settings/keys",detail:"claude-sonnet-4-20250514 model"},
+      {name:"Groq API",url:"https://console.groq.com/keys",detail:"llama-3.1-70b-versatile model via Groq inference"},
+    ]}>
       <p className="desc">Paste any LLM API key to get an AI-generated bias analysis. Provider is auto-detected from the key. Your key is never stored. Supports <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Gemini</a>, <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style={{color:"#0d7680"}}>OpenAI</a>, <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Anthropic</a>, <a href="https://console.groq.com/keys" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Groq</a>.</p>
       <div style={{display:"flex",gap:"8px"}}>
         <div style={{flex:1,position:"relative"}}>
@@ -1200,7 +1225,12 @@ function SourceBiasSection({ sb, topSources, allClassified, allUnclassified }) {
   const [showAll, setShowAll] = useState(false);
   const totalDomains = allClassified.length + allUnclassified.length;
   return (
-    <Section title="Source Bias Profile" icon={"\uD83D\uDCF0"}>
+    <Section title="Source Bias Profile" icon={"\uD83D\uDCF0"} sources={[
+      {name:"AllSides Media Bias Ratings v11 (Dec 2025)",url:"https://www.allsides.com/media-bias/ratings",detail:"219 outlets rated Left to Right via blind surveys, editorial reviews, and third-party research"},
+      {name:"Media Bias/Fact Check (MBFC)",url:"https://mediabiasfactcheck.com/",detail:"Used for international and Indian outlets not rated by AllSides"},
+      {name:"Custom institutional classification",detail:"23 archival/reference domains (archive.org, nobelprize.org, smithsonianmag.com, etc.) rated Center"},
+      {name:"Wikipedia API",url:"https://en.wikipedia.org/w/api.php",detail:"Wikitext parsed for <ref> tags and external URLs; subdomain fallback matching applied"},
+    ]}>
       <p className="desc">Cited domains mapped to AllSides media bias ratings. Scale: -2 (Left) to +2 (Right).</p>
       <div className="stats-grid stats-4">
         <Stat label="Mean Bias" value={sb.mean !== null ? (sb.mean > 0 ? "+" : "") + sb.mean.toFixed(2) : "N/A"} sub={sb.label} />
@@ -1566,7 +1596,11 @@ function WikiBiasAnalyzer() {
       <PolicySection policy={r.policy} sections={r.sections} />
 
       {/* Module 3: Sentiment */}
-      <Section title="Sentiment Asymmetry (VADER)" icon={"\uD83D\uDE10"}>
+      <Section title="Sentiment Asymmetry (VADER)" icon={"\uD83D\uDE10"} sources={[
+        {name:"VADER Sentiment Lexicon",url:"https://github.com/cjhutto/vaderSentiment",detail:"~1,200 human-rated words with valence scores from -4.0 to +4.0, validated on social media text"},
+        {name:"Hutto & Gilbert (2014)",url:"https://ojs.aaai.org/index.php/ICWSM/article/view/14550",detail:"'VADER: A Parsimonious Rule-Based Model for Sentiment Analysis of Social Media Text' — ICWSM 2014"},
+        {name:"Compact lexicon (embedded)",detail:"Subset of ~1,200 highest-impact words from the full VADER lexicon, embedded directly in the analyzer"},
+      ]}>
         <p className="desc">VADER rule-based sentiment (<a href="https://github.com/cjhutto/vaderSentiment" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Hutto &amp; Gilbert 2014</a>). Deterministic lexicon of ~1,200 scored words. Scale: -1.0 to +1.0. <a href="https://ojs.aaai.org/index.php/ICWSM/article/view/14550" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Paper</a></p>
         <div className="stats-grid stats-5">
           <Stat label="Mean" value={(r.sentiment.mean > 0 ? "+" : "") + r.sentiment.mean.toFixed(3)} />
@@ -1594,7 +1628,11 @@ function WikiBiasAnalyzer() {
       </Section>
 
       {/* Module 4: Structure */}
-      <Section title="Structural Balance" icon={"\uD83C\uDFD7\uFE0F"}>
+      <Section title="Structural Balance" icon={"\uD83C\uDFD7\uFE0F"} sources={[
+        {name:"Gini coefficient",url:"https://en.wikipedia.org/wiki/Gini_coefficient",detail:"Statistical measure of inequality (0=perfectly even, 1=maximally skewed) applied to section word counts"},
+        {name:"Wikipedia:Verifiability (WP:V)",url:"https://en.wikipedia.org/wiki/Wikipedia:Verifiability",detail:"Core content policy requiring inline citations; reference density measured as refs per 1,000 words"},
+        {name:"Wikipedia:Neutral point of view",url:"https://en.wikipedia.org/wiki/Wikipedia:Neutral_point_of_view",detail:"Checks for Criticism/Controversy and Reception/Response sections as structural balance indicators"},
+      ]}>
         <p className="desc">Section sizes, citation distribution, and <a href="https://en.wikipedia.org/wiki/Gini_coefficient" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Gini coefficient</a> for structural evenness. Reference density per <a href="https://en.wikipedia.org/wiki/Wikipedia:Verifiability" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:V</a>.</p>
         <div className="stats-grid stats-4">
           <Stat label="Sections" value={r.structure.sections} />
@@ -1628,7 +1666,12 @@ function WikiBiasAnalyzer() {
       </Section>
 
       {/* Module 5: Lexical */}
-      <Section title="Lexical Analysis" icon={"\uD83D\uDD24"}>
+      <Section title="Lexical Analysis" icon={"\uD83D\uDD24"} sources={[
+        {name:"Type-Token Ratio (TTR)",url:"https://en.wikipedia.org/wiki/Lexical_density",detail:"Vocabulary diversity metric: unique words / total words. Higher = more diverse vocabulary"},
+        {name:"Hapax legomenon ratio",url:"https://en.wikipedia.org/wiki/Hapax_legomenon",detail:"Words appearing exactly once / total words. Higher = richer, less repetitive language"},
+        {name:"Wikipedia:Manual of Style",url:"https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style",detail:"Source for hedging, intensifier, and superlative word lists (HEDGING: 28 phrases, INTENSIFIERS: 16, SUPERLATIVES: 15)"},
+        {name:"Passive voice regex",detail:"Pattern-matching ~30 passive constructions (e.g., 'was found', 'were built', 'has been shown')"},
+      ]}>
         <p className="desc">Vocabulary diversity (<a href="https://en.wikipedia.org/wiki/Lexical_density" target="_blank" rel="noopener" style={{color:"#0d7680"}}>TTR</a>, <a href="https://en.wikipedia.org/wiki/Hapax_legomenon" target="_blank" rel="noopener" style={{color:"#0d7680"}}>hapax ratio</a>), passive voice, hedging, intensifiers, and superlatives. Word lists from <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:MOS</a>.</p>
         <div className="stats-grid stats-4">
           <Stat label="Words" value={r.lexical.wordCount?.toLocaleString()} />
@@ -1643,7 +1686,11 @@ function WikiBiasAnalyzer() {
       </Section>
 
       {/* Module 6: Entman Framing */}
-      <Section title="Entman Framing Analysis" icon={"\uD83D\uDDBC\uFE0F"} defaultOpen={false}>
+      <Section title="Entman Framing Analysis" icon={"\uD83D\uDDBC\uFE0F"} defaultOpen={false} sources={[
+        {name:"Entman, R.M. (1993)",url:"https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1460-2466.1993.tb01304.x",detail:"'Framing: Toward Clarification of a Fractured Paradigm' — Journal of Communication, 43(4), 51-58"},
+        {name:"Custom frame lexicon (embedded)",detail:"4 frame types (problem/causal/moral/solution) × 2 directions (left/right) = 8 phrase lists, ~100 phrases total"},
+        {name:"Frame weighting schema",detail:"Weighted scoring: problem=1.0×, causal=1.2×, moral=1.5×, solution=1.0× — moral frames weighted higher per Entman's salience theory"},
+      ]}>
         <p className="desc"><a href="https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1460-2466.1993.tb01304.x" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Entman (1993)</a>: Identifies problem/causal/moral/solution frames associated with left vs right political discourse. Score: {r.entman.score > 0 ? "+" : ""}{r.entman.score} ({r.entman.label})</p>
         <div className="stats-grid stats-4">
           <Stat label="Score" value={(r.entman.score > 0 ? "+" : "") + r.entman.score.toFixed(3)} sub={r.entman.label} />
@@ -1670,7 +1717,11 @@ function WikiBiasAnalyzer() {
       </Section>
 
       {/* Module 7: Gentzkow-Shapiro */}
-      <Section title="Gentzkow-Shapiro Slant Index" icon={"\uD83C\uDFDB\uFE0F"} defaultOpen={false}>
+      <Section title="Gentzkow-Shapiro Slant Index" icon={"\uD83C\uDFDB\uFE0F"} defaultOpen={false} sources={[
+        {name:"Gentzkow, M. & Shapiro, J.M. (2010)",url:"https://web.stanford.edu/~gentzkow/research/biasmeas.pdf",detail:"'What Drives Media Slant? Evidence from U.S. Daily Newspapers' — Econometrica, 78(1), 35-71"},
+        {name:"Congressional Record phrase database",detail:"Adapted from Gentzkow-Shapiro methodology: 48 Democratic-leaning and 49 Republican-leaning phrases identified from congressional speech frequency differentials"},
+        {name:"Partisan phrase lists (embedded)",detail:"Examples: 'estate tax' vs 'death tax', 'climate change' vs 'energy independence', 'gun safety' vs 'second amendment rights'"},
+      ]}>
         <p className="desc"><a href="https://web.stanford.edu/~gentzkow/research/biasmeas.pdf" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Gentzkow &amp; Shapiro (2010)</a>: Measures political slant via phrase frequency similarity to Democratic (+) vs Republican (-) congressional speech patterns.</p>
         <div className="stats-grid stats-4">
           <Stat label="Slant Score" value={(r.gentzkowShapiro.score > 0 ? "+" : "") + r.gentzkowShapiro.score.toFixed(3)} sub={r.gentzkowShapiro.label} />
@@ -1700,7 +1751,12 @@ function WikiBiasAnalyzer() {
       </Section>
 
       {/* Module 8: Van Dijk */}
-      <Section title="Van Dijk Ideological Square" icon={"\u2B1C"} defaultOpen={false}>
+      <Section title="Van Dijk Ideological Square" icon={"\u2B1C"} defaultOpen={false} sources={[
+        {name:"Van Dijk, T.A. (1998)",url:"https://discourses.org/wp-content/uploads/2022/07/Teun-A.-van-Dijk-1998-Ideology-A-Multidisciplinary-Approach.pdf",detail:"'Ideology: A Multidisciplinary Approach' — Sage Publications. Chapter on ideological square discourse structures"},
+        {name:"Us/Them marker lists (embedded)",detail:"16 in-group markers ('we', 'our', 'citizens', 'allies') and 17 out-group markers ('they', 'enemies', 'regime', 'extremist')"},
+        {name:"Descriptor lexicons (embedded)",detail:"25 positive descriptors ('democratic', 'freedom', 'innovative') and 24 negative descriptors ('corrupt', 'reckless', 'authoritarian')"},
+        {name:"Sentence-level co-occurrence analysis",detail:"Scores assigned per-sentence based on co-occurrence of Us/Them markers with positive/negative descriptors"},
+      ]}>
         <p className="desc"><a href="https://en.wikipedia.org/wiki/Teun_A._van_Dijk" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Van Dijk (1998)</a>: Measures Us/Them polarization by tracking positive/negative descriptors applied to in-group vs out-group references.</p>
         <div className="stats-grid stats-4">
           <Stat label="Polarization" value={(r.vanDijk.score > 0 ? "+" : "") + r.vanDijk.score.toFixed(3)} sub={r.vanDijk.label} />
@@ -1729,7 +1785,14 @@ function WikiBiasAnalyzer() {
       </Section>
 
       {/* Module 9: Fairclough CDA */}
-      <Section title="Fairclough Critical Discourse Analysis" icon={"\uD83D\uDD0D"} defaultOpen={false}>
+      <Section title="Fairclough Critical Discourse Analysis" icon={"\uD83D\uDD0D"} defaultOpen={false} sources={[
+        {name:"Fairclough, N. (1995)",url:"https://www.routledge.com/Critical-Discourse-Analysis-The-Critical-Study-of-Language/Fairclough/p/book/9781138226852",detail:"'Critical Discourse Analysis: The Critical Study of Language' — Longman. Three-dimensional CDA framework"},
+        {name:"Passive voice patterns",detail:"Regex matching ~30 passive constructions — measures agency obscuring (e.g., 'was decided' hides who decided)"},
+        {name:"Nominalization suffixes",detail:"10 suffix patterns (-tion, -sion, -ment, -ness, -ance, -ence, -ity, -ism, -ist, -age) — converts processes to things"},
+        {name:"Modality markers",detail:"11 high-certainty words ('must', 'certainly') vs 12 low-certainty words ('may', 'arguably') — epistemic stance analysis"},
+        {name:"Presupposition triggers",detail:"12 phrases that present assumptions as fact ('the fact that', 'it is well known', 'of course')"},
+        {name:"Evaluative adjective list",detail:"25 value-laden adjectives ('significant', 'controversial', 'unprecedented') — measures ideological loading"},
+      ]}>
         <p className="desc"><a href="https://en.wikipedia.org/wiki/Critical_discourse_analysis" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Fairclough (1995)</a>: Analyzes how linguistic choices construct power and ideology. Higher scores = more ideologically loaded language.</p>
         <div className="stats-grid stats-4">
           <Stat label="CDA Score" value={(r.fairclough.score > 0 ? "+" : "") + r.fairclough.score.toFixed(3)} sub={r.fairclough.label} />
@@ -1752,8 +1815,7 @@ function WikiBiasAnalyzer() {
 
       {/* Footer */}
       <div className="footer">
-        <p>Modules 1-9 are deterministic and rule-based. Same article always produces identical results.</p>
-        <p style={{marginTop:"4px"}}>Sources: <a href="https://www.allsides.com/media-bias/ratings" target="_blank" rel="noopener">AllSides Media Bias Ratings</a> | <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch" target="_blank" rel="noopener">Wikipedia WP:NPOV Word Lists</a> | <a href="https://github.com/cjhutto/vaderSentiment" target="_blank" rel="noopener">VADER Sentiment Lexicon</a> (Hutto &amp; Gilbert 2014) | <a href="https://web.stanford.edu/~gentzkow/research/biasmeas.pdf" target="_blank" rel="noopener">Gentzkow-Shapiro 2010</a></p>
+        <p>Modules 1-9 are deterministic and rule-based. Same article always produces identical results. Click <strong>"sources"</strong> on any module header to see the databases and papers consulted.</p>
       </div>
     </div>
   );
