@@ -921,18 +921,13 @@ function PolicySection({ policy, sections }) {
 }
 
 function LLMAnalysisSection({ plainText, title }) {
-  const [provider, setProvider] = useState("openai");
-  const [model, setModel] = useState("gpt-4o-mini");
+  const [model, setModel] = useState("gemini-2.0-flash");
   const [apiKey, setApiKey] = useState("");
   const [llmResult, setLlmResult] = useState(null);
   const [llmLoading, setLlmLoading] = useState(false);
   const [llmError, setLlmError] = useState(null);
 
-  const PROVIDERS = {
-    openai: { name: "OpenAI", models: ["gpt-4o-mini","gpt-4o","gpt-4-turbo","gpt-3.5-turbo"], endpoint: "https://api.openai.com/v1/chat/completions" },
-    anthropic: { name: "Anthropic", models: ["claude-sonnet-4-20250514","claude-haiku-4-20250414","claude-3-5-sonnet-20241022"], endpoint: "https://api.anthropic.com/v1/messages" },
-    groq: { name: "Groq", models: ["llama-3.1-70b-versatile","llama-3.1-8b-instant","mixtral-8x7b-32768"], endpoint: "https://api.groq.com/openai/v1/chat/completions" },
-  };
+  const MODELS = ["gemini-2.0-flash","gemini-2.0-flash-lite","gemini-1.5-flash","gemini-1.5-pro"];
 
   const prompt = `You are a media bias analyst. Analyze the following Wikipedia article for bias.
 
@@ -951,33 +946,27 @@ Provide a structured analysis covering:
 Be specific and cite examples from the text. Be balanced in your own assessment.`;
 
   const runLLM = async () => {
-    if (!apiKey.trim()) { setLlmError("Please enter an API key."); return; }
+    if (!apiKey.trim()) { setLlmError("Please enter your Gemini API key."); return; }
     setLlmLoading(true);
     setLlmError(null);
     setLlmResult(null);
 
     try {
-      let response;
-      if (provider === "anthropic") {
-        response = await fetch(PROVIDERS.anthropic.endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-          body: JSON.stringify({ model, max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
-        });
-        const data = await response.json();
-        if (data.error) throw new Error(data.error.message);
-        setLlmResult(data.content[0].text);
-      } else {
-        const endpoint = PROVIDERS[provider].endpoint;
-        response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-          body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], max_tokens: 2000 })
-        });
-        const data = await response.json();
-        if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-        setLlmResult(data.choices[0].message.content);
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 2000 }
+        })
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      if (!data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) {
+        throw new Error("No response generated. Check your API key and try again.");
       }
+      setLlmResult(data.candidates[0].content.parts[0].text);
     } catch (e) {
       setLlmError(e.message);
     }
@@ -985,22 +974,17 @@ Be specific and cite examples from the text. Be balanced in your own assessment.
   };
 
   return (
-    <Section title="AI-Powered Analysis (Optional)" icon={"\uD83E\uDD16"} defaultOpen={false}>
-      <p className="desc">Use your own LLM API key to get an AI-generated bias analysis. Your key is never stored — it stays in your browser only.</p>
+    <Section title="AI-Powered Analysis (Gemini)" icon={"\uD83E\uDD16"} defaultOpen={false}>
+      <p className="desc">Use your <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Google Gemini API key</a> to get an AI-generated bias analysis. Your key is never stored — it stays in your browser only.</p>
       <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-        <select value={provider} onChange={e => { setProvider(e.target.value); setModel(PROVIDERS[e.target.value].models[0]); }} style={{
-          padding:"8px 12px",border:"1px solid #ccc1b7",background:"#fff",fontSize:"14px",fontFamily:"'Source Sans 3', sans-serif",color:"#33302e",flex:"0 0 auto"
-        }}>
-          {Object.entries(PROVIDERS).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
-        </select>
         <select value={model} onChange={e => setModel(e.target.value)} style={{
           padding:"8px 12px",border:"1px solid #ccc1b7",background:"#fff",fontSize:"14px",fontFamily:"'Source Sans 3', sans-serif",color:"#33302e",flex:"0 0 auto"
         }}>
-          {PROVIDERS[provider].models.map(m => <option key={m} value={m}>{m}</option>)}
+          {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
       </div>
       <div style={{display:"flex",gap:"8px"}}>
-        <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={`Paste your ${PROVIDERS[provider].name} API key...`}
+        <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Paste your Gemini API key..."
           onKeyDown={e => { if (e.key === "Enter" && apiKey.trim()) runLLM(); }}
           style={{flex:1,padding:"10px 14px",border:"1px solid #ccc1b7",fontSize:"14px",fontFamily:"'Source Sans 3', sans-serif",background:"#fff",color:"#33302e"}} />
         <button onClick={runLLM} disabled={llmLoading || !apiKey.trim()} className="btn-primary" style={{whiteSpace:"nowrap"}}>
