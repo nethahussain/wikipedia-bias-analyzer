@@ -954,12 +954,11 @@ function SentimentBar({ name, data }) {
   );
 }
 
-function Section({ title, icon, children, defaultOpen = true }) {
+function Section({ title, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="card">
       <button className="section-header" onClick={() => setOpen(!open)}>
-        <span className="section-icon">{icon}</span>
         <span className="section-title">{title}</span>
         <span className="section-toggle">{open ? "\u25B2" : "\u25BC"}</span>
       </button>
@@ -1019,7 +1018,7 @@ function PolicySection({ policy, sections }) {
   const [showText, setShowText] = useState(false);
 
   return (
-    <Section title="Wikipedia Policy Compliance" icon={"\uD83D\uDCCB"}>
+    <Section title="Wikipedia Policy Compliance">
       <p className="desc">Text scanned against Wikipedia's own <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Unsupported_attributions" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:WEASEL</a>, <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Puffery" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:PEACOCK</a>, and <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Editorializing" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:EDITORIALIZING</a> word lists.</p>
       <div className="stats-grid stats-4">
         <Stat label="Total Flags" value={policy.total.count} sub={`${policy.total.density}/1k words`} />
@@ -1172,7 +1171,7 @@ Be specific and cite examples from the text. Be balanced in your own assessment.
   };
 
   return (
-    <Section title="AI-Powered Analysis (Optional)" icon={"\uD83E\uDD16"} defaultOpen={false}>
+    <Section title="AI-Powered Analysis (Optional)" defaultOpen={false}>
       <p className="desc">Paste any LLM API key to get an AI-generated bias analysis. Provider is auto-detected from the key. Your key is never stored. Supports <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Gemini</a>, <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style={{color:"#0d7680"}}>OpenAI</a>, <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Anthropic</a>, <a href="https://console.groq.com/keys" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Groq</a>.</p>
       <div style={{display:"flex",gap:"8px"}}>
         <div style={{flex:1,position:"relative"}}>
@@ -1203,7 +1202,7 @@ function SourceBiasSection({ sb, topSources, allClassified, allUnclassified }) {
   const [showAll, setShowAll] = useState(false);
   const totalDomains = allClassified.length + allUnclassified.length;
   return (
-    <Section title="Source Bias Profile" icon={"\uD83D\uDCF0"}>
+    <Section title="Source Bias Profile">
       <p className="desc">Cited domains mapped to AllSides media bias ratings. Scale: -2 (Left) to +2 (Right).</p>
       <div className="stats-grid stats-4">
         <Stat label="Mean Bias" value={sb.mean !== null ? (sb.mean > 0 ? "+" : "") + sb.mean.toFixed(2) : "N/A"} sub={sb.label} />
@@ -1308,7 +1307,6 @@ function FrameworkScoreTable({ results: r }) {
   return (
     <div className="card">
       <button className="section-header" onClick={() => setExpanded(!expanded)}>
-        <span className="section-icon">{"\uD83D\uDCCA"}</span>
         <span className="section-title">Multi-Framework Bias Scorecard</span>
         <span className="section-toggle">{expanded ? "\u25B2" : "\u25BC"}</span>
       </button>
@@ -1411,7 +1409,6 @@ function ReferencesSection() {
   return (
     <div className="card">
       <button className="section-header" onClick={() => setOpen(!open)} style={{background: open ? "#f8f5f0" : "transparent"}}>
-        <span className="section-icon">{"\uD83D\uDCDA"}</span>
         <span className="section-title">References & Sources</span>
         <span className="section-toggle">{open ? "\u25B2" : "\u25BC"}</span>
       </button>
@@ -1644,7 +1641,7 @@ function WikiBiasAnalyzer() {
       <PolicySection policy={r.policy} sections={r.sections} />
 
       {/* Module 3: Sentiment */}
-      <Section title="Sentiment Asymmetry (VADER)" icon={"\uD83D\uDE10"}>
+      <Section title="Sentiment Asymmetry (VADER)">
         <p className="desc">VADER rule-based sentiment (<a href="https://github.com/cjhutto/vaderSentiment" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Hutto &amp; Gilbert 2014</a>). Deterministic lexicon of ~1,200 scored words. Scale: -1.0 to +1.0. <a href="https://ojs.aaai.org/index.php/ICWSM/article/view/14550" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Paper</a></p>
         <div className="stats-grid stats-5">
           <Stat label="Mean" value={(r.sentiment.mean > 0 ? "+" : "") + r.sentiment.mean.toFixed(3)} />
@@ -1672,7 +1669,7 @@ function WikiBiasAnalyzer() {
       </Section>
 
       {/* Module 4: Structure */}
-      <Section title="Structural Balance" icon={"\uD83C\uDFD7\uFE0F"}>
+      <Section title="Structural Balance">
         <p className="desc">Section sizes, citation distribution, and <a href="https://en.wikipedia.org/wiki/Gini_coefficient" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Gini coefficient</a> for structural evenness. Reference density per <a href="https://en.wikipedia.org/wiki/Wikipedia:Verifiability" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:V</a>.</p>
         <div className="stats-grid stats-4">
           <Stat label="Sections" value={r.structure.sections} />
@@ -1706,7 +1703,7 @@ function WikiBiasAnalyzer() {
       </Section>
 
       {/* Module 5: Lexical */}
-      <Section title="Lexical Analysis" icon={"\uD83D\uDD24"}>
+      <Section title="Lexical Analysis">
         <p className="desc">Vocabulary diversity (<a href="https://en.wikipedia.org/wiki/Lexical_density" target="_blank" rel="noopener" style={{color:"#0d7680"}}>TTR</a>, <a href="https://en.wikipedia.org/wiki/Hapax_legomenon" target="_blank" rel="noopener" style={{color:"#0d7680"}}>hapax ratio</a>), passive voice, hedging, intensifiers, and superlatives. Word lists from <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:MOS</a>.</p>
         <div className="stats-grid stats-4">
           <Stat label="Words" value={r.lexical.wordCount?.toLocaleString()} />
@@ -1721,7 +1718,7 @@ function WikiBiasAnalyzer() {
       </Section>
 
       {/* Module 6: Entman Framing */}
-      <Section title="Entman Framing Analysis" icon={"\uD83D\uDDBC\uFE0F"} defaultOpen={false}>
+      <Section title="Entman Framing Analysis" defaultOpen={false}>
         <p className="desc"><a href="https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1460-2466.1993.tb01304.x" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Entman (1993)</a>: Identifies problem/causal/moral/solution frames associated with left vs right political discourse. Score: {r.entman.score > 0 ? "+" : ""}{r.entman.score} ({r.entman.label})</p>
         <div className="stats-grid stats-4">
           <Stat label="Score" value={(r.entman.score > 0 ? "+" : "") + r.entman.score.toFixed(3)} sub={r.entman.label} />
@@ -1748,7 +1745,7 @@ function WikiBiasAnalyzer() {
       </Section>
 
       {/* Module 7: Van Dijk */}
-      <Section title="Van Dijk Ideological Square" icon={"\u2B1C"} defaultOpen={false}>
+      <Section title="Van Dijk Ideological Square" defaultOpen={false}>
         <p className="desc"><a href="https://en.wikipedia.org/wiki/Teun_A._van_Dijk" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Van Dijk (1998)</a>: Measures Us/Them polarization by tracking positive/negative descriptors applied to in-group vs out-group references.</p>
         <div className="stats-grid stats-4">
           <Stat label="Polarization" value={(r.vanDijk.score > 0 ? "+" : "") + r.vanDijk.score.toFixed(3)} sub={r.vanDijk.label} />
@@ -1777,7 +1774,7 @@ function WikiBiasAnalyzer() {
       </Section>
 
       {/* Module 8: Fairclough CDA */}
-      <Section title="Fairclough Critical Discourse Analysis" icon={"\uD83D\uDD0D"} defaultOpen={false}>
+      <Section title="Fairclough Critical Discourse Analysis" defaultOpen={false}>
         <p className="desc"><a href="https://en.wikipedia.org/wiki/Critical_discourse_analysis" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Fairclough (1995)</a>: Analyzes how linguistic choices construct power and ideology. Higher scores = more ideologically loaded language.</p>
         <div className="stats-grid stats-4">
           <Stat label="CDA Score" value={(r.fairclough.score > 0 ? "+" : "") + r.fairclough.score.toFixed(3)} sub={r.fairclough.label} />
