@@ -171,6 +171,12 @@ const ALLSIDES = {
   "supremecourt.gov":0,"tandfonline.com":0,"tangle.media":0,"theaustralian.com.au":0,
   "thelancet.com":0,"theprint.in":0,"timesofindia.indiatimes.com":0,"un.org":0,"who.int":0,
   "wiley.com":0,"worldbank.org":0,"wsj.com":0,
+  // ── ARCHIVAL / REFERENCE (rated 0 = neutral) ──
+  "archive.org":0,"web.archive.org":0,"books.google.com":0,"scholar.google.com":0,
+  "worldcat.org":0,"biodiversitylibrary.org":0,"europeana.eu":0,"gutenberg.org":0,
+  "smithsonianmag.com":0,"si.edu":0,"nobelprize.org":0,"iop.org":0,"rsc.org":0,
+  "acs.org":0,"aip.org":0,"aps.org":0,"royalsociety.org":0,"nationalgeographic.com":0,
+  "iucn.org":0,"wmo.int":0,"icrc.org":0,"amnesty.org":0,"hrw.org":0,
   // ── LEAN RIGHT (+1) ──
   "dailymail.co.uk":1,"dailywire.com":1,"dnaindia.com":1,"epochtimes.com":1,"forbes.com":1,
   "foxbusiness.com":1,"freebeacon.com":1,"ijr.com":1,"judicialwatch.org":1,
@@ -487,13 +493,29 @@ function extractDomains(wikitext) {
   return domains;
 }
 
+// Try to match a domain or its parent domains against the ALLSIDES database
+function matchDomain(d) {
+  if (d in ALLSIDES) return d;
+  // Try parent domains: e.g. "archive.nytimes.com" → "nytimes.com"
+  const parts = d.split(".");
+  for (let i = 1; i < parts.length - 1; i++) {
+    const parent = parts.slice(i).join(".");
+    if (parent in ALLSIDES) return parent;
+  }
+  return null;
+}
+
 function analyzeSourceBias(wikitext) {
   const domains = extractDomains(wikitext);
   const counts = {};
   domains.forEach(d => { counts[d] = (counts[d] || 0) + 1; });
   const classified = {}, unclassified = {};
   for (const [d, c] of Object.entries(counts)) {
-    if (d in ALLSIDES) classified[d] = { count: c, rating: ALLSIDES[d] };
+    const matched = matchDomain(d);
+    if (matched) {
+      if (matched in classified) classified[matched].count += c;
+      else classified[matched] = { count: c, rating: ALLSIDES[matched] };
+    }
     else unclassified[d] = c;
   }
   const ratings = [];

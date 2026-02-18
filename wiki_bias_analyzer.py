@@ -126,10 +126,30 @@ ALLSIDES_RATINGS = {
     "redstate.com": 2, "rt.com": 2, "sputniknews.com": 2, "theblaze.com": 2,
     "thefederalist.com": 2, "thegatewaypundit.com": 2, "townhall.com": 2, "twitchy.com": 2,
     "westernjournal.com": 2, "wnd.com": 2,
+
+    # ── ARCHIVAL / REFERENCE (rated 0 = neutral) ──
+    "archive.org": 0, "web.archive.org": 0, "books.google.com": 0, "scholar.google.com": 0,
+    "worldcat.org": 0, "biodiversitylibrary.org": 0, "europeana.eu": 0, "gutenberg.org": 0,
+    "smithsonianmag.com": 0, "si.edu": 0, "nobelprize.org": 0, "iop.org": 0, "rsc.org": 0,
+    "acs.org": 0, "aip.org": 0, "aps.org": 0, "royalsociety.org": 0, "nationalgeographic.com": 0,
+    "iucn.org": 0, "wmo.int": 0, "icrc.org": 0, "amnesty.org": 0, "hrw.org": 0,
 }
 
 # Label mapping for display
 BIAS_LABELS = {-2: "Left", -1: "Lean Left", 0: "Center", 1: "Lean Right", 2: "Right"}
+
+
+def match_domain(domain):
+    """Try to match a domain or its parent domains against the ratings database."""
+    if domain in ALLSIDES_RATINGS:
+        return domain
+    # Try parent domains: e.g. "archive.nytimes.com" → "nytimes.com"
+    parts = domain.split(".")
+    for i in range(1, len(parts) - 1):
+        parent = ".".join(parts[i:])
+        if parent in ALLSIDES_RATINGS:
+            return parent
+    return None
 
 
 def extract_source_domains(wikitext):
@@ -160,12 +180,16 @@ def analyze_source_bias(wikitext):
     unclassified = {}
 
     for domain, count in domain_counts.items():
-        if domain in ALLSIDES_RATINGS:
-            classified[domain] = {
-                "count": count,
-                "rating": ALLSIDES_RATINGS[domain],
-                "label": BIAS_LABELS[ALLSIDES_RATINGS[domain]]
-            }
+        matched = match_domain(domain)
+        if matched:
+            if matched in classified:
+                classified[matched]["count"] += count
+            else:
+                classified[matched] = {
+                    "count": count,
+                    "rating": ALLSIDES_RATINGS[matched],
+                    "label": BIAS_LABELS[ALLSIDES_RATINGS[matched]]
+                }
         else:
             unclassified[domain] = count
 

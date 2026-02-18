@@ -189,6 +189,29 @@ pewresearch.org,0,Center,Institutional,Research
 gallup.com,0,Center,Institutional,Research
 brookings.edu,0,Center,MBFC,Think Tank
 rand.org,0,Center,MBFC,Think Tank
+# Archival / Reference / Scientific Societies
+archive.org,0,Center,Institutional,Archive
+web.archive.org,0,Center,Institutional,Archive
+books.google.com,0,Center,Institutional,Reference
+worldcat.org,0,Center,Institutional,Reference
+biodiversitylibrary.org,0,Center,Institutional,Archive
+europeana.eu,0,Center,Institutional,Archive
+gutenberg.org,0,Center,Institutional,Archive
+smithsonianmag.com,0,Center,Institutional,Museum
+si.edu,0,Center,Institutional,Museum
+nobelprize.org,0,Center,Institutional,Academic
+iop.org,0,Center,Institutional,Academic
+rsc.org,0,Center,Institutional,Academic
+acs.org,0,Center,Institutional,Academic
+aip.org,0,Center,Institutional,Academic
+aps.org,0,Center,Institutional,Academic
+royalsociety.org,0,Center,Institutional,Academic
+nationalgeographic.com,0,Center,Institutional,Reference
+iucn.org,0,Center,Institutional,Governmental
+wmo.int,0,Center,Institutional,Governmental
+icrc.org,0,Center,Institutional,Governmental
+amnesty.org,0,Center,Institutional,NGO
+hrw.org,0,Center,Institutional,NGO
 # ══════════════════════════════════════════════════════════════
 # LEAN RIGHT (+1)
 # Source: AllSides v11 (Dec 2025), MBFC
