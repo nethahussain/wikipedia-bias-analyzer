@@ -8,39 +8,40 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Source+Sans+3:wght@300;400;600;700&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%); min-height: 100vh; color: #1e293b; }
+  body { font-family: 'Source Sans 3', Georgia, 'Times New Roman', serif; background: #fff1e5; min-height: 100vh; color: #33302e; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .spinner { width: 48px; height: 48px; border: 4px solid #bfdbfe; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+  .spinner { width: 48px; height: 48px; border: 3px solid #e8d5c4; border-top-color: #990f3d; border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
 
   /* Layout */
   .center-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
-  .container { max-width: 768px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; min-height: 100vh; }
-  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); overflow: hidden; }
+  .container { max-width: 768px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-height: 100vh; }
+  .card { background: #fff; border: none; border-radius: 0; box-shadow: none; overflow: hidden; border-top: 4px solid #990f3d; }
 
   /* Search */
   .search-box { width: 100%; max-width: 560px; }
-  .search-input { width: 100%; padding: 16px 20px; font-size: 18px; border: 2px solid #e2e8f0; border-radius: 16px; outline: none; background: #fff; transition: border-color 0.2s; }
-  .search-input:focus { border-color: #60a5fa; }
-  .search-input::placeholder { color: #94a3b8; }
-  .suggestions { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); z-index: 50; overflow: hidden; }
-  .suggestion-btn { width: 100%; text-align: left; padding: 12px 20px; border: none; background: none; cursor: pointer; color: #334155; font-size: 15px; border-bottom: 1px solid #f8fafc; transition: background 0.15s; }
-  .suggestion-btn:hover { background: #eff6ff; }
+  .search-input { width: 100%; padding: 14px 18px; font-size: 17px; font-family: 'Source Sans 3', sans-serif; border: 1px solid #ccc1b7; border-radius: 0; outline: none; background: #fff; transition: border-color 0.2s; }
+  .search-input:focus { border-color: #990f3d; }
+  .search-input::placeholder { color: #a39d97; }
+  .suggestions { position: absolute; top: 100%; left: 0; right: 0; margin-top: 2px; background: #fff; border: 1px solid #ccc1b7; border-radius: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.08); z-index: 50; overflow: hidden; }
+  .suggestion-btn { width: 100%; text-align: left; padding: 10px 18px; border: none; background: none; cursor: pointer; color: #33302e; font-size: 15px; font-family: 'Source Sans 3', sans-serif; border-bottom: 1px solid #f2dfce; transition: background 0.15s; }
+  .suggestion-btn:hover { background: #fff1e5; }
   .suggestion-btn:last-child { border-bottom: none; }
 
   /* Buttons */
-  .btn-primary { padding: 12px 32px; background: #2563eb; color: #fff; font-weight: 600; font-size: 15px; border: none; border-radius: 12px; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 8px rgba(37,99,235,0.3); }
-  .btn-primary:hover { background: #1d4ed8; }
+  .btn-primary { padding: 12px 32px; background: #0d7680; color: #fff; font-weight: 600; font-size: 15px; font-family: 'Source Sans 3', sans-serif; border: none; border-radius: 0; cursor: pointer; transition: background 0.2s; }
+  .btn-primary:hover { background: #0a5e66; }
   .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn-secondary { padding: 8px 16px; background: #f1f5f9; color: #64748b; font-size: 14px; border: none; border-radius: 8px; cursor: pointer; transition: background 0.15s; }
-  .btn-secondary:hover { background: #e2e8f0; }
+  .btn-secondary { padding: 8px 16px; background: #f2dfce; color: #66605c; font-size: 14px; font-family: 'Source Sans 3', sans-serif; border: none; border-radius: 0; cursor: pointer; transition: background 0.15s; }
+  .btn-secondary:hover { background: #e8d5c4; }
 
   /* Section (collapsible) */
-  .section-header { width: 100%; display: flex; align-items: center; gap: 12px; padding: 16px 20px; background: #f8fafc; border: none; cursor: pointer; text-align: left; transition: background 0.15s; }
-  .section-header:hover { background: #f1f5f9; }
-  .section-icon { font-size: 18px; }
-  .section-title { font-weight: 600; color: #1e293b; flex: 1; font-size: 15px; }
-  .section-toggle { color: #94a3b8; font-size: 18px; }
+  .section-header { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #fff; border: none; border-bottom: 1px solid #e8d5c4; cursor: pointer; text-align: left; transition: background 0.15s; }
+  .section-header:hover { background: #fff9f5; }
+  .section-icon { font-size: 16px; }
+  .section-title { font-family: 'Playfair Display', Georgia, serif; font-weight: 700; color: #33302e; flex: 1; font-size: 16px; letter-spacing: -0.01em; }
+  .section-toggle { color: #a39d97; font-size: 16px; }
   .section-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
 
   /* Stats grid */
@@ -48,65 +49,67 @@
   .stats-4 { grid-template-columns: repeat(4, 1fr); }
   .stats-5 { grid-template-columns: repeat(5, 1fr); }
   .stat { text-align: center; }
-  .stat-value { font-size: 22px; font-weight: 700; color: #1e293b; }
-  .stat-label { font-size: 11px; color: #64748b; margin-top: 4px; }
-  .stat-sub { font-size: 11px; color: #94a3b8; }
+  .stat-value { font-size: 22px; font-weight: 700; color: #33302e; font-family: 'Playfair Display', Georgia, serif; }
+  .stat-label { font-size: 11px; color: #66605c; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-sub { font-size: 11px; color: #a39d97; }
 
   /* Bars */
   .metric-row { display: flex; align-items: center; gap: 12px; }
-  .metric-label { font-size: 13px; color: #475569; width: 140px; flex-shrink: 0; }
-  .metric-track { flex: 1; height: 20px; background: #f1f5f9; border-radius: 10px; overflow: hidden; }
-  .metric-fill { height: 100%; border-radius: 10px; transition: width 0.5s; }
-  .metric-value { font-size: 13px; font-family: monospace; color: #334155; width: 72px; text-align: right; }
+  .metric-label { font-size: 13px; color: #66605c; width: 140px; flex-shrink: 0; }
+  .metric-track { flex: 1; height: 18px; background: #f2dfce; border-radius: 0; overflow: hidden; }
+  .metric-fill { height: 100%; border-radius: 0; transition: width 0.5s; }
+  .metric-value { font-size: 13px; font-family: 'Source Sans 3', monospace; color: #33302e; width: 72px; text-align: right; }
 
   /* Sentiment bars */
   .sent-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
-  .sent-name { font-size: 12px; color: #475569; width: 176px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sent-track { flex: 1; height: 12px; background: #f1f5f9; border-radius: 6px; overflow: hidden; position: relative; }
-  .sent-center { position: absolute; top: 0; bottom: 0; width: 1px; background: #cbd5e1; left: 50%; }
-  .sent-fill { position: absolute; top: 0; bottom: 0; border-radius: 6px; opacity: 0.7; }
-  .sent-val { font-size: 12px; font-family: monospace; width: 56px; text-align: right; }
+  .sent-name { font-size: 12px; color: #66605c; width: 176px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sent-track { flex: 1; height: 12px; background: #f2dfce; border-radius: 0; overflow: hidden; position: relative; }
+  .sent-center { position: absolute; top: 0; bottom: 0; width: 1px; background: #ccc1b7; left: 50%; }
+  .sent-fill { position: absolute; top: 0; bottom: 0; border-radius: 0; opacity: 0.8; }
+  .sent-val { font-size: 12px; font-family: monospace; width: 56px; text-align: right; color: #33302e; }
 
   /* Bias spectrum */
-  .spectrum-bar { position: relative; height: 32px; border-radius: 16px; overflow: hidden; background: linear-gradient(to right, #2563eb, #60a5fa, #a3a3a3, #f87171, #dc2626); }
-  .spectrum-marker { position: absolute; top: 0; bottom: 0; width: 4px; background: #fff; border: 2px solid #1e293b; border-radius: 4px; z-index: 10; transform: translateX(-50%); }
+  .spectrum-bar { position: relative; height: 32px; border-radius: 0; overflow: hidden; background: linear-gradient(to right, #082a75, #2e6c9e, #a39d97, #c0392b, #990f3d); }
+  .spectrum-marker { position: absolute; top: 0; bottom: 0; width: 4px; background: #fff; border: 2px solid #33302e; border-radius: 0; z-index: 10; transform: translateX(-50%); }
   .spectrum-labels { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; font-size: 11px; font-weight: 700; color: #fff; }
   .dist-bar-row { display: flex; gap: 4px; height: 64px; align-items: flex-end; }
   .dist-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .dist-fill { border-radius: 4px 4px 0 0; width: 100%; }
-  .dist-count { font-size: 11px; color: #64748b; }
-  .dist-labels { display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; }
+  .dist-fill { border-radius: 0; width: 100%; }
+  .dist-count { font-size: 11px; color: #66605c; }
+  .dist-labels { display: flex; justify-content: space-between; font-size: 11px; color: #a39d97; }
 
   /* Source list */
-  .source-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 2px 0; }
-  .source-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
-  .source-domain { color: #334155; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .source-rating { color: #94a3b8; font-size: 12px; }
-  .source-count { font-family: monospace; color: #64748b; width: 32px; text-align: right; }
+  .source-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; border-bottom: 1px solid #f2dfce; }
+  .source-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .source-domain { color: #33302e; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .source-rating { color: #66605c; font-size: 12px; }
+  .source-count { font-family: monospace; color: #66605c; width: 32px; text-align: right; }
 
   /* Misc */
-  .desc { font-size: 12px; color: #94a3b8; }
+  .desc { font-size: 13px; color: #66605c; line-height: 1.5; }
+  .desc a { color: #0d7680; text-decoration: none; border-bottom: 1px solid #0d7680; }
+  .desc a:hover { color: #990f3d; border-color: #990f3d; }
   .section-prop-row { display: flex; align-items: center; gap: 8px; }
-  .section-prop-name { font-size: 12px; color: #475569; width: 176px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .section-prop-track { flex: 1; height: 16px; background: #f1f5f9; border-radius: 8px; overflow: hidden; }
-  .section-prop-fill { height: 100%; background: #60a5fa; border-radius: 8px; }
-  .section-prop-val { font-size: 12px; font-family: monospace; color: #64748b; width: 56px; text-align: right; }
-  .tag { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; }
-  .tag-green { background: #dcfce7; color: #15803d; }
-  .tag-gray { background: #f1f5f9; color: #94a3b8; }
-  .quote-box { font-size: 12px; color: #64748b; padding: 12px; border-radius: 8px; margin-top: 4px; }
-  .quote-green { background: #f0fdf4; }
-  .quote-red { background: #fef2f2; }
-  .quote-label-green { font-weight: 600; color: #15803d; }
-  .quote-label-red { font-weight: 600; color: #b91c1c; }
-  .example-line { font-size: 12px; color: #64748b; }
-  .example-bold { font-weight: 600; }
-  .footer { text-align: center; font-size: 12px; color: #94a3b8; padding: 16px 0; }
-  .five-col { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; text-align: center; font-size: 12px; color: #94a3b8; padding-top: 16px; }
-  .header-bar { display: flex; align-items: center; justify-content: space-between; background: #fff; border-radius: 16px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid #e2e8f0; }
-  .header-title { font-size: 18px; font-weight: 700; color: #1e293b; }
-  .header-sub { font-size: 13px; color: #64748b; }
-  .small-title { font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+  .section-prop-name { font-size: 12px; color: #66605c; width: 176px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .section-prop-track { flex: 1; height: 14px; background: #f2dfce; border-radius: 0; overflow: hidden; }
+  .section-prop-fill { height: 100%; background: #0d7680; border-radius: 0; }
+  .section-prop-val { font-size: 12px; font-family: monospace; color: #66605c; width: 56px; text-align: right; }
+  .tag { display: inline-block; padding: 4px 10px; border-radius: 0; font-size: 12px; border: 1px solid; }
+  .tag-green { background: #e6f3ed; color: #0a5e3a; border-color: #0a5e3a; }
+  .tag-gray { background: #f2dfce; color: #a39d97; border-color: #ccc1b7; }
+  .quote-box { font-size: 13px; color: #66605c; padding: 12px 16px; margin-top: 4px; border-left: 3px solid; }
+  .quote-green { background: #f5fbf8; border-color: #0d7680; }
+  .quote-red { background: #fdf5f5; border-color: #990f3d; }
+  .quote-label-green { font-weight: 600; color: #0d7680; }
+  .quote-label-red { font-weight: 600; color: #990f3d; }
+  .example-line { font-size: 13px; color: #66605c; }
+  .example-bold { font-weight: 600; color: #33302e; }
+  .footer { text-align: center; font-size: 12px; color: #a39d97; padding: 24px 0; border-top: 1px solid #e8d5c4; }
+  .five-col { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; text-align: center; font-size: 12px; color: #a39d97; padding-top: 16px; }
+  .header-bar { display: flex; align-items: center; justify-content: space-between; background: #fff; padding: 16px 20px; border-top: 4px solid #990f3d; }
+  .header-title { font-size: 20px; font-weight: 700; color: #33302e; font-family: 'Playfair Display', Georgia, serif; }
+  .header-sub { font-size: 13px; color: #66605c; }
+  .small-title { font-size: 13px; font-weight: 600; color: #33302e; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.03em; }
   .tags-row { display: flex; gap: 12px; margin-top: 12px; }
 
   @media (max-width: 640px) {
@@ -192,7 +195,7 @@ const ALLSIDES = {
   "townhall.com":2,"twitchy.com":2,"westernjournal.com":2,"wnd.com":2,
 };
 const BIAS_LABELS = {"-2":"Left","-1":"Lean Left","0":"Center","1":"Lean Right","2":"Right"};
-const BIAS_COLORS = {"-2":"#2563eb","-1":"#60a5fa","0":"#a3a3a3","1":"#f87171","2":"#dc2626"};
+const BIAS_COLORS = {"-2":"#082a75","-1":"#2e6c9e","0":"#66605c","1":"#c0392b","2":"#990f3d"};
 
 // ═══════════════════════════════════════════════════════════════════
 // WIKIPEDIA POLICY WORD LISTS
@@ -809,6 +812,288 @@ function Stat({ label, value, sub }) {
   );
 }
 
+function highlightText(text, weaselPhrases, peacockPhrases, editorialPhrases) {
+  // Build a combined list of all phrases with their types, sorted longest-first to avoid partial matches
+  const allPhrases = [
+    ...weaselPhrases.map(p => ({ phrase: p, type: "weasel" })),
+    ...peacockPhrases.map(p => ({ phrase: p, type: "peacock" })),
+    ...editorialPhrases.map(p => ({ phrase: p, type: "editorial" })),
+  ].sort((a, b) => b.phrase.length - a.phrase.length);
+
+  if (allPhrases.length === 0) return [text];
+
+  // Build regex that matches any phrase
+  const escaped = allPhrases.map(p => p.phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = new RegExp("\\b(" + escaped.join("|") + ")\\b", "gi");
+
+  // Build a type lookup
+  const typeLookup = {};
+  allPhrases.forEach(p => { typeLookup[p.phrase.toLowerCase()] = p.type; });
+
+  const parts = [];
+  let last = 0;
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > last) parts.push({ text: text.slice(last, match.index), type: null });
+    const matchedType = typeLookup[match[0].toLowerCase()] || "weasel";
+    parts.push({ text: match[0], type: matchedType });
+    last = re.lastIndex;
+  }
+  if (last < text.length) parts.push({ text: text.slice(last), type: null });
+  return parts;
+}
+
+const HIGHLIGHT_COLORS = {
+  weasel: { bg: "#fef3c7", border: "#f59e0b", label: "Weasel" },
+  peacock: { bg: "#ede9fe", border: "#8b5cf6", label: "Peacock" },
+  editorial: { bg: "#fee2e2", border: "#ef4444", label: "Editorial" },
+};
+
+function PolicySection({ policy, sections }) {
+  const [showText, setShowText] = useState(false);
+
+  return (
+    <Section title="Wikipedia Policy Compliance" icon={"\uD83D\uDCCB"}>
+      <p className="desc">Text scanned against Wikipedia's own <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Unsupported_attributions" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:WEASEL</a>, <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Puffery" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:PEACOCK</a>, and <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Editorializing" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:EDITORIALIZING</a> word lists.</p>
+      <div className="stats-grid stats-4">
+        <Stat label="Total Flags" value={policy.total.count} sub={`${policy.total.density}/1k words`} />
+        <Stat label="Weasel" value={policy.weasel.count} sub={`${policy.weasel.density}/1k`} />
+        <Stat label="Peacock" value={policy.peacock.count} sub={`${policy.peacock.density}/1k`} />
+        <Stat label="Editorial" value={policy.editorial.count} sub={`${policy.editorial.density}/1k`} />
+      </div>
+      <MetricBar label="Weasel Words" value={policy.weasel.density} max={15} color="#f59e0b" suffix="/1k" />
+      <MetricBar label="Peacock Terms" value={policy.peacock.density} max={15} color="#8b5cf6" suffix="/1k" />
+      <MetricBar label="Editorializing" value={policy.editorial.density} max={15} color="#ef4444" suffix="/1k" />
+      {[["Weasel",policy.weasel],["Peacock",policy.peacock],["Editorial",policy.editorial]].map(([name, data]) =>
+        data.examples.length > 0 && (
+          <div key={name} className="example-line">
+            <span className="example-bold">{name}:</span> {data.examples.map(([w,c]) => `"${w}" (${c})`).join(", ")}
+          </div>
+        )
+      )}
+
+      {showText && sections && (
+        <div style={{marginTop:"12px"}}>
+          <div style={{display:"flex",gap:"12px",marginBottom:"8px",flexWrap:"wrap"}}>
+            {Object.entries(HIGHLIGHT_COLORS).map(([type, c]) => (
+              <span key={type} style={{fontSize:"12px",display:"flex",alignItems:"center",gap:"4px"}}>
+                <span style={{display:"inline-block",width:"14px",height:"14px",backgroundColor:c.bg,border:`2px solid ${c.border}`,borderRadius:"3px"}} />
+                {c.label}
+              </span>
+            ))}
+          </div>
+          <div style={{maxHeight:"500px",overflowY:"auto",border:"1px solid #e8d5c4",borderRadius:"0",padding:"16px",backgroundColor:"#fff",fontSize:"14px",lineHeight:"1.7"}}>
+            {Object.entries(sections).map(([sectionName, text]) => {
+              if (!text.trim()) return null;
+              const parts = highlightText(text, WEASEL, PEACOCK, EDITORIAL);
+              const hasHighlights = parts.some(p => p.type);
+              return (
+                <div key={sectionName} style={{marginBottom:"16px"}}>
+                  <div style={{fontWeight:700,fontSize:"15px",color:"#33302e",fontFamily:"'Playfair Display', Georgia, serif",marginBottom:"4px",borderBottom:"1px solid #e8d5c4",paddingBottom:"4px"}}>{sectionName}</div>
+                  <div style={{color:"#334155"}}>
+                    {parts.map((p, i) => p.type ? (
+                      <span key={i} title={HIGHLIGHT_COLORS[p.type].label} style={{
+                        backgroundColor: HIGHLIGHT_COLORS[p.type].bg,
+                        borderBottom: `2px solid ${HIGHLIGHT_COLORS[p.type].border}`,
+                        borderRadius: "2px",
+                        padding: "0 2px",
+                        cursor: "help",
+                      }}>{p.text}</span>
+                    ) : <span key={i}>{p.text}</span>)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {policy.total.count > 0 && (
+        <button onClick={() => setShowText(!showText)} style={{
+          marginTop:"10px",background:"none",border:"1px solid #ccc1b7",borderRadius:"0",
+          padding:"8px 14px",fontSize:"13px",color:"#33302e",cursor:"pointer",width:"100%",fontFamily:"'Source Sans 3', sans-serif"
+        }}>
+          {showText ? "\u25B2 Hide highlighted text" : "\u25BC View article with highlights"}
+        </button>
+      )}
+    </Section>
+  );
+}
+
+function LLMAnalysisSection({ plainText, title }) {
+  const [provider, setProvider] = useState("openai");
+  const [model, setModel] = useState("gpt-4o-mini");
+  const [apiKey, setApiKey] = useState("");
+  const [llmResult, setLlmResult] = useState(null);
+  const [llmLoading, setLlmLoading] = useState(false);
+  const [llmError, setLlmError] = useState(null);
+
+  const PROVIDERS = {
+    openai: { name: "OpenAI", models: ["gpt-4o-mini","gpt-4o","gpt-4-turbo","gpt-3.5-turbo"], endpoint: "https://api.openai.com/v1/chat/completions" },
+    anthropic: { name: "Anthropic", models: ["claude-sonnet-4-20250514","claude-haiku-4-20250414","claude-3-5-sonnet-20241022"], endpoint: "https://api.anthropic.com/v1/messages" },
+    groq: { name: "Groq", models: ["llama-3.1-70b-versatile","llama-3.1-8b-instant","mixtral-8x7b-32768"], endpoint: "https://api.groq.com/openai/v1/chat/completions" },
+  };
+
+  const prompt = `You are a media bias analyst. Analyze the following Wikipedia article for bias.
+
+Article title: "${title}"
+
+Article text (truncated to fit context):
+${plainText.slice(0, 6000)}
+
+Provide a structured analysis covering:
+1. OVERALL BIAS ASSESSMENT: Rate the article on a scale from -5 (strong left bias) to +5 (strong right bias), with 0 being neutral. Explain your rating.
+2. FRAMING ANALYSIS: How is the subject framed? Are there notable omissions or emphasis patterns?
+3. LANGUAGE BIAS: Identify specific phrases or word choices that suggest bias.
+4. SOURCE BALANCE: Based on the text, does the article appear to draw from diverse perspectives?
+5. COMPARISON WITH RULE-BASED ANALYSIS: Note that our deterministic tool found the following - provide your LLM-based perspective on whether these findings are meaningful.
+
+Be specific and cite examples from the text. Be balanced in your own assessment.`;
+
+  const runLLM = async () => {
+    if (!apiKey.trim()) { setLlmError("Please enter an API key."); return; }
+    setLlmLoading(true);
+    setLlmError(null);
+    setLlmResult(null);
+
+    try {
+      let response;
+      if (provider === "anthropic") {
+        response = await fetch(PROVIDERS.anthropic.endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+          body: JSON.stringify({ model, max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+        });
+        const data = await response.json();
+        if (data.error) throw new Error(data.error.message);
+        setLlmResult(data.content[0].text);
+      } else {
+        const endpoint = PROVIDERS[provider].endpoint;
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+          body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], max_tokens: 2000 })
+        });
+        const data = await response.json();
+        if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+        setLlmResult(data.choices[0].message.content);
+      }
+    } catch (e) {
+      setLlmError(e.message);
+    }
+    setLlmLoading(false);
+  };
+
+  return (
+    <Section title="AI-Powered Analysis (Optional)" icon={"\uD83E\uDD16"} defaultOpen={false}>
+      <p className="desc">Use your own LLM API key to get an AI-generated bias analysis. Your key is never stored — it stays in your browser only.</p>
+      <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+        <select value={provider} onChange={e => { setProvider(e.target.value); setModel(PROVIDERS[e.target.value].models[0]); }} style={{
+          padding:"8px 12px",border:"1px solid #ccc1b7",background:"#fff",fontSize:"14px",fontFamily:"'Source Sans 3', sans-serif",color:"#33302e",flex:"0 0 auto"
+        }}>
+          {Object.entries(PROVIDERS).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
+        </select>
+        <select value={model} onChange={e => setModel(e.target.value)} style={{
+          padding:"8px 12px",border:"1px solid #ccc1b7",background:"#fff",fontSize:"14px",fontFamily:"'Source Sans 3', sans-serif",color:"#33302e",flex:"0 0 auto"
+        }}>
+          {PROVIDERS[provider].models.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+      <div style={{display:"flex",gap:"8px"}}>
+        <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={`Paste your ${PROVIDERS[provider].name} API key...`}
+          onKeyDown={e => { if (e.key === "Enter" && apiKey.trim()) runLLM(); }}
+          style={{flex:1,padding:"10px 14px",border:"1px solid #ccc1b7",fontSize:"14px",fontFamily:"'Source Sans 3', sans-serif",background:"#fff",color:"#33302e"}} />
+        <button onClick={runLLM} disabled={llmLoading || !apiKey.trim()} className="btn-primary" style={{whiteSpace:"nowrap"}}>
+          {llmLoading ? "Analyzing..." : "Run Analysis"}
+        </button>
+      </div>
+      {llmError && <div style={{color:"#990f3d",fontSize:"13px",padding:"8px 12px",background:"#fdf5f5",border:"1px solid #990f3d"}}>{llmError}</div>}
+      {llmResult && (
+        <div style={{background:"#fff",border:"1px solid #e8d5c4",padding:"16px",fontSize:"14px",lineHeight:"1.7",color:"#33302e",whiteSpace:"pre-wrap",maxHeight:"600px",overflowY:"auto"}}>
+          {llmResult}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function SourceBiasSection({ sb, topSources, allClassified, allUnclassified }) {
+  const [showAll, setShowAll] = useState(false);
+  const totalDomains = allClassified.length + allUnclassified.length;
+  return (
+    <Section title="Source Bias Profile" icon={"\uD83D\uDCF0"}>
+      <p className="desc">Cited domains mapped to AllSides media bias ratings. Scale: -2 (Left) to +2 (Right).</p>
+      <div className="stats-grid stats-4">
+        <Stat label="Mean Bias" value={sb.mean !== null ? (sb.mean > 0 ? "+" : "") + sb.mean.toFixed(2) : "N/A"} sub={sb.label} />
+        <Stat label="Sources" value={sb.total || (sb.totalC + sb.totalU)} />
+        <Stat label="Classified" value={`${sb.totalC} (${sb.total ? Math.round(sb.totalC/sb.total*100) : 0}%)`} />
+        <Stat label="Unique Domains" value={totalDomains} />
+      </div>
+      <BiasSpectrum mean={sb.mean} dist={sb.dist} />
+
+      {!showAll && topSources.length > 0 && (
+        <div>
+          <div className="small-title">Top Cited Sources</div>
+          <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+            {topSources.map(([domain, info]) => (
+              <div key={domain} className="source-row">
+                <div className="source-dot" style={{ backgroundColor: BIAS_COLORS[String(info.rating)] }} />
+                <span className="source-domain">{domain}</span>
+                <span className="source-rating">{BIAS_LABELS[String(info.rating)]}</span>
+                <span className="source-count">{info.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showAll && (
+        <div>
+          {allClassified.length > 0 && (
+            <div>
+              <div className="small-title" style={{marginBottom:"6px"}}>Classified Sources ({allClassified.length} domains, {sb.totalC} citations)</div>
+              <div style={{display:"flex",flexDirection:"column",gap:"3px",maxHeight:"400px",overflowY:"auto",padding:"0 4px"}}>
+                {allClassified.map(([domain, info]) => (
+                  <div key={domain} className="source-row">
+                    <div className="source-dot" style={{ backgroundColor: BIAS_COLORS[String(info.rating)] }} />
+                    <span className="source-domain">{domain}</span>
+                    <span className="source-rating">{BIAS_LABELS[String(info.rating)]}</span>
+                    <span className="source-count">{info.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {allUnclassified.length > 0 && (
+            <div style={{marginTop:"12px"}}>
+              <div className="small-title" style={{marginBottom:"6px"}}>Unclassified Sources ({allUnclassified.length} domains, {sb.totalU} citations)</div>
+              <div style={{display:"flex",flexDirection:"column",gap:"3px",maxHeight:"300px",overflowY:"auto",padding:"0 4px"}}>
+                {allUnclassified.map(([domain, count]) => (
+                  <div key={domain} className="source-row">
+                    <div className="source-dot" style={{ backgroundColor: "#e2e8f0" }} />
+                    <span className="source-domain">{domain}</span>
+                    <span className="source-rating" style={{color:"#94a3b8"}}>Not rated</span>
+                    <span className="source-count">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {totalDomains > 0 && (
+        <button onClick={() => setShowAll(!showAll)} style={{
+          marginTop:"10px",background:"none",border:"1px solid #ccc1b7",borderRadius:"0",
+          padding:"8px 14px",fontSize:"13px",color:"#33302e",cursor:"pointer",width:"100%",fontFamily:"'Source Sans 3', sans-serif"
+        }}>
+          {showAll ? "\u25B2 Show top 10" : `\u25BC View all ${totalDomains} sources`}
+        </button>
+      )}
+    </Section>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════
@@ -886,7 +1171,7 @@ function WikiBiasAnalyzer() {
       await new Promise(r => setTimeout(r, 50));
       const lexical = analyzeLexical(plainText);
 
-      setResults({ sourceBias, policy, sentiment, structure, lexical, wordCount, sectionCount: Object.keys(sections).length, title: actualTitle });
+      setResults({ sourceBias, policy, sentiment, structure, lexical, wordCount, sectionCount: Object.keys(sections).length, title: actualTitle, sections, plainText });
     } catch (e) {
       setResults({ error: e.message });
     }
@@ -902,9 +1187,9 @@ function WikiBiasAnalyzer() {
       <div className="center-page">
         <div className="search-box" style={{display:"flex",flexDirection:"column",gap:"32px"}}>
           <div style={{textAlign:"center",display:"flex",flexDirection:"column",gap:"12px"}}>
-            <div style={{fontSize:"48px",fontWeight:700,color:"#1e293b"}}>W</div>
-            <h1 style={{fontSize:"28px",fontWeight:700,color:"#1e293b"}}>Wikipedia Bias Analyzer</h1>
-            <p style={{fontSize:"14px",color:"#64748b",maxWidth:"420px",margin:"0 auto",lineHeight:1.5}}>Deterministic, transparent, and replicable bias detection for any English Wikipedia article. Powered by AllSides ratings, Wikipedia policy word lists, and VADER sentiment analysis.</p>
+            <div style={{fontSize:"48px",fontWeight:900,color:"#33302e",fontFamily:"'Playfair Display', Georgia, serif"}}>W</div>
+            <h1 style={{fontSize:"28px",fontWeight:700,color:"#33302e",fontFamily:"'Playfair Display', Georgia, serif",letterSpacing:"-0.02em"}}>Wikipedia Bias Analyzer</h1>
+            <p style={{fontSize:"14px",color:"#66605c",maxWidth:"420px",margin:"0 auto",lineHeight:1.6}}>Deterministic, transparent, and replicable bias detection for any English Wikipedia article. Powered by AllSides ratings, Wikipedia policy word lists, and VADER sentiment analysis.</p>
           </div>
           <div style={{position:"relative"}}>
             <input
@@ -971,6 +1256,8 @@ function WikiBiasAnalyzer() {
   // ─── RESULTS PAGE ───
   const sb = r.sourceBias;
   const topSources = Object.entries(sb.classified).sort((a,b) => b[1].count - a[1].count).slice(0,10);
+  const allClassified = Object.entries(sb.classified).sort((a,b) => b[1].count - a[1].count);
+  const allUnclassified = Object.entries(sb.unclassified).sort((a,b) => b[1] - a[1]);
 
   return (
     <div className="container">
@@ -984,56 +1271,14 @@ function WikiBiasAnalyzer() {
       </div>
 
       {/* Module 1: Source Bias */}
-      <Section title="Source Bias Profile" icon={"\uD83D\uDCF0"}>
-        <p className="desc">Cited domains mapped to AllSides media bias ratings. Scale: -2 (Left) to +2 (Right).</p>
-        <div className="stats-grid stats-4">
-          <Stat label="Mean Bias" value={sb.mean !== null ? (sb.mean > 0 ? "+" : "") + sb.mean.toFixed(2) : "N/A"} sub={sb.label} />
-          <Stat label="Sources" value={sb.total || (sb.totalC + sb.totalU)} />
-          <Stat label="Classified" value={`${sb.totalC} (${sb.total ? Math.round(sb.totalC/sb.total*100) : 0}%)`} />
-          <Stat label="Unique Domains" value={Object.keys(sb.classified).length + Object.keys(sb.unclassified).length} />
-        </div>
-        <BiasSpectrum mean={sb.mean} dist={sb.dist} />
-        {topSources.length > 0 && (
-          <div>
-            <div className="small-title">Top Cited Sources</div>
-            <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
-              {topSources.map(([domain, info]) => (
-                <div key={domain} className="source-row">
-                  <div className="source-dot" style={{ backgroundColor: BIAS_COLORS[String(info.rating)] }} />
-                  <span className="source-domain">{domain}</span>
-                  <span className="source-rating">{BIAS_LABELS[String(info.rating)]}</span>
-                  <span className="source-count">{info.count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </Section>
+      <SourceBiasSection sb={sb} topSources={topSources} allClassified={allClassified} allUnclassified={allUnclassified} />
 
       {/* Module 2: Policy Compliance */}
-      <Section title="Wikipedia Policy Compliance" icon={"\uD83D\uDCCB"}>
-        <p className="desc">Text scanned against Wikipedia's own WP:WEASEL, WP:PEACOCK, and WP:EDITORIALIZING word lists.</p>
-        <div className="stats-grid stats-4">
-          <Stat label="Total Flags" value={r.policy.total.count} sub={`${r.policy.total.density}/1k words`} />
-          <Stat label="Weasel" value={r.policy.weasel.count} sub={`${r.policy.weasel.density}/1k`} />
-          <Stat label="Peacock" value={r.policy.peacock.count} sub={`${r.policy.peacock.density}/1k`} />
-          <Stat label="Editorial" value={r.policy.editorial.count} sub={`${r.policy.editorial.density}/1k`} />
-        </div>
-        <MetricBar label="Weasel Words" value={r.policy.weasel.density} max={15} color="#f59e0b" suffix="/1k" />
-        <MetricBar label="Peacock Terms" value={r.policy.peacock.density} max={15} color="#8b5cf6" suffix="/1k" />
-        <MetricBar label="Editorializing" value={r.policy.editorial.density} max={15} color="#ef4444" suffix="/1k" />
-        {[["Weasel",r.policy.weasel],["Peacock",r.policy.peacock],["Editorial",r.policy.editorial]].map(([name, data]) =>
-          data.examples.length > 0 && (
-            <div key={name} className="example-line">
-              <span className="example-bold">{name}:</span> {data.examples.map(([w,c]) => `"${w}" (${c})`).join(", ")}
-            </div>
-          )
-        )}
-      </Section>
+      <PolicySection policy={r.policy} sections={r.sections} />
 
       {/* Module 3: Sentiment */}
       <Section title="Sentiment Asymmetry (VADER)" icon={"\uD83D\uDE10"}>
-        <p className="desc">VADER rule-based sentiment. Deterministic lexicon of ~1,200 scored words. Scale: -1.0 to +1.0.</p>
+        <p className="desc">VADER rule-based sentiment (<a href="https://github.com/cjhutto/vaderSentiment" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Hutto &amp; Gilbert 2014</a>). Deterministic lexicon of ~1,200 scored words. Scale: -1.0 to +1.0. <a href="https://ojs.aaai.org/index.php/ICWSM/article/view/14550" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Paper</a></p>
         <div className="stats-grid stats-5">
           <Stat label="Mean" value={(r.sentiment.mean > 0 ? "+" : "") + r.sentiment.mean.toFixed(3)} />
           <Stat label="Positive" value={`${r.sentiment.posPct}%`} />
@@ -1061,6 +1306,7 @@ function WikiBiasAnalyzer() {
 
       {/* Module 4: Structure */}
       <Section title="Structural Balance" icon={"\uD83C\uDFD7\uFE0F"}>
+        <p className="desc">Section sizes, citation distribution, and <a href="https://en.wikipedia.org/wiki/Gini_coefficient" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Gini coefficient</a> for structural evenness. Reference density per <a href="https://en.wikipedia.org/wiki/Wikipedia:Verifiability" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:V</a>.</p>
         <div className="stats-grid stats-4">
           <Stat label="Sections" value={r.structure.sections} />
           <Stat label="Gini Coeff." value={r.structure.gini.toFixed(3)} sub="0=even, 1=skewed" />
@@ -1094,6 +1340,7 @@ function WikiBiasAnalyzer() {
 
       {/* Module 5: Lexical */}
       <Section title="Lexical Analysis" icon={"\uD83D\uDD24"}>
+        <p className="desc">Vocabulary diversity (<a href="https://en.wikipedia.org/wiki/Lexical_density" target="_blank" rel="noopener" style={{color:"#0d7680"}}>TTR</a>, <a href="https://en.wikipedia.org/wiki/Hapax_legomenon" target="_blank" rel="noopener" style={{color:"#0d7680"}}>hapax ratio</a>), passive voice, hedging, intensifiers, and superlatives. Word lists from <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:MOS</a>.</p>
         <div className="stats-grid stats-4">
           <Stat label="Words" value={r.lexical.wordCount?.toLocaleString()} />
           <Stat label="Type-Token Ratio" value={r.lexical.ttr?.toFixed(3)} sub="vocab diversity" />
@@ -1106,10 +1353,13 @@ function WikiBiasAnalyzer() {
         <MetricBar label="Passive Voice" value={r.lexical.passive?.density || 0} max={30} color="#64748b" suffix="/1k" />
       </Section>
 
+      {/* Module 6: LLM Analysis */}
+      <LLMAnalysisSection plainText={r.plainText} title={r.title} />
+
       {/* Footer */}
       <div className="footer">
-        <p>All metrics are deterministic and rule-based. Same article always produces identical results.</p>
-        <p style={{marginTop:"4px"}}>Sources: AllSides Media Bias Ratings | Wikipedia WP:NPOV Word Lists | VADER Sentiment Lexicon (Hutto &amp; Gilbert 2014)</p>
+        <p>Modules 1-5 are deterministic and rule-based. Same article always produces identical results.</p>
+        <p style={{marginTop:"4px"}}>Sources: <a href="https://www.allsides.com/media-bias/ratings" target="_blank" rel="noopener">AllSides Media Bias Ratings</a> | <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch" target="_blank" rel="noopener">Wikipedia WP:NPOV Word Lists</a> | <a href="https://github.com/cjhutto/vaderSentiment" target="_blank" rel="noopener">VADER Sentiment Lexicon</a> (Hutto &amp; Gilbert 2014)</p>
       </div>
     </div>
   );
