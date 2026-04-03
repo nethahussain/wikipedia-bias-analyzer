@@ -233,6 +233,130 @@ const BIAS_LABELS = {"-2":"Left","-1":"Lean Left","0":"Center","1":"Lean Right",
 const BIAS_COLORS = {"-2":"#082a75","-1":"#2e6c9e","0":"#66605c","1":"#c0392b","2":"#990f3d"};
 
 // ═══════════════════════════════════════════════════════════════════
+// PUBLISHER BIAS — for resolving Google Books & Archive.org items
+// ═══════════════════════════════════════════════════════════════════
+const PUBLISHER_BIAS = {
+  "oxford university press":0,"cambridge university press":0,"harvard university press":0,
+  "princeton university press":0,"yale university press":0,"mit press":0,
+  "stanford university press":0,"university of chicago press":0,"columbia university press":0,
+  "johns hopkins university press":0,"duke university press":0,"cornell university press":0,
+  "university of california press":0,"routledge":0,"springer":0,"elsevier":0,
+  "wiley":0,"sage publications":0,"taylor & francis":0,"mcgraw-hill":0,
+  "pearson":0,"cengage":0,"academic press":0,"world scientific":0,
+  "de gruyter":0,"brill":0,"palgrave macmillan":0,"bloomsbury academic":0,
+  "penguin random house":0,"harpercollins":0,"simon & schuster":0,
+  "hachette":0,"macmillan":0,"knopf":0,"vintage":0,"doubleday":0,
+  "random house":0,"penguin":0,"penguin books":0,"viking":0,"scribner":0,
+  "little, brown":0,"farrar, straus and giroux":0,"w. w. norton":0,
+  "houghton mifflin":0,"basic books":0,"free press":0,"pantheon":0,
+  "the new press":-1,"verso":-2,"haymarket books":-2,"beacon press":-1,
+  "chelsea green publishing":-1,"nation books":-1,"metropolitan books":-1,
+  "regnery publishing":2,"encounter books":1,"broadside books":1,
+  "sentinel":1,"crown forum":1,"threshold editions":1,
+  "conservative book club":2,"liberty fund":1,"isi books":1,
+  "world health organization":0,"united nations":0,"world bank":0,
+  "government printing office":0,"national academies press":0,
+};
+
+function matchPublisher(publisher) {
+  const p = publisher.toLowerCase();
+  for (const [key, rating] of Object.entries(PUBLISHER_BIAS)) {
+    if (p.includes(key) || key.includes(p)) return { rating, matched: key };
+  }
+  return null;
+}
+
+// Extract archive.org and Google Books URLs from wikitext for lazy resolution
+function extractArchiveBookUrls(wikitext) {
+  const urlRe = /https?:\/\/[^\s\]|}<>"']+/g;
+  const items = [];
+  let m;
+  while ((m = urlRe.exec(wikitext)) !== null) {
+    const url = m[0].replace(/[.,;)]+$/, "");
+    // Wayback Machine
+    const wb = url.match(/https?:\/\/web\.archive\.org\/web\/\d+[/*]*(https?:\/\/[^\s\]|}<>"']+)/i);
+    if (wb) {
+      const origDomain = wb[1].match(/https?:\/\/([a-zA-Z0-9._-]+\.[a-zA-Z]{2,})/);
+      if (origDomain) {
+        let d = origDomain[1].toLowerCase();
+        if (d.startsWith("www.")) d = d.slice(4);
+        items.push({ type:"wayback", domain: d, url });
+      }
+      continue;
+    }
+    // archive.org item pages
+    const ai = url.match(/https?:\/\/archive\.org\/(details|stream)\/([^\s\/?&#]+)/i);
+    if (ai) { items.push({ type:"archive_item", id: ai[2], url }); continue; }
+    // Google Books
+    const gb = url.match(/https?:\/\/books\.google\.[a-z.]+\/books\?[^&]*id=([a-zA-Z0-9_-]+)/i);
+    if (gb) { items.push({ type:"gbooks", id: gb[1], url }); continue; }
+  }
+  return items;
+}
+
+// Async: resolve a batch of archive/book items → { source, rating, isBook, domain? }
+async function resolveArchiveBookSources(items, onProgress) {
+  const results = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (onProgress) onProgress(i + 1, items.length);
+    try {
+      if (item.type === "wayback") {
+        // Already have the domain — look it up in ALLSIDES
+        const matched = matchDomain(item.domain);
+        if (matched) {
+          results.push({ source: item.domain, rating: ALLSIDES[matched], isBook: false, resolvedFrom: "Wayback Machine", url: item.url });
+        } else {
+          results.push({ source: item.domain, rating: null, isBook: false, resolvedFrom: "Wayback Machine", url: item.url });
+        }
+        continue;
+      }
+      if (item.type === "gbooks") {
+        const res = await fetch("https://www.googleapis.com/books/v1/volumes/" + item.id);
+        if (!res.ok) { results.push({ source: "Google Books (ID: " + item.id + ")", rating: null, isBook: true, resolvedFrom: "Google Books", url: item.url }); continue; }
+        const data = await res.json();
+        const publisher = (data.volumeInfo?.publisher || "").trim();
+        const title = (data.volumeInfo?.title || "").trim();
+        const label = publisher ? publisher : title ? title : "Unknown";
+        const pm = publisher ? matchPublisher(publisher) : null;
+        results.push({ source: label + " (Google Books)", rating: pm ? pm.rating : null, isBook: true, resolvedFrom: "Google Books", url: item.url });
+        continue;
+      }
+      if (item.type === "archive_item") {
+        const res = await fetch("https://archive.org/metadata/" + item.id);
+        if (!res.ok) { results.push({ source: "Archive.org: " + item.id, rating: null, isBook: true, resolvedFrom: "Archive.org", url: item.url }); continue; }
+        const data = await res.json();
+        const publisher = (data.metadata?.publisher || "").trim();
+        const origUrl = data.metadata?.["identifier-access"] || data.metadata?.source || "";
+        // If it has an original URL, resolve that domain
+        if (origUrl) {
+          const od = origUrl.match(/https?:\/\/([a-zA-Z0-9._-]+\.[a-zA-Z]{2,})/);
+          if (od) {
+            let d = od[1].toLowerCase();
+            if (d.startsWith("www.")) d = d.slice(4);
+            const matched = matchDomain(d);
+            results.push({ source: d, rating: matched ? ALLSIDES[matched] : null, isBook: false, resolvedFrom: "Archive.org item", url: item.url });
+            continue;
+          }
+        }
+        if (publisher) {
+          const pm = matchPublisher(publisher);
+          results.push({ source: publisher + " (Archive.org)", rating: pm ? pm.rating : null, isBook: true, resolvedFrom: "Archive.org", url: item.url });
+        } else {
+          const title = (data.metadata?.title || item.id).substring(0, 60);
+          results.push({ source: title + " (Archive.org)", rating: null, isBook: true, resolvedFrom: "Archive.org", url: item.url });
+        }
+        continue;
+      }
+    } catch (e) {
+      console.warn("Resolve failed:", item, e);
+      results.push({ source: item.url.substring(0, 60), rating: null, isBook: item.type !== "wayback", resolvedFrom: item.type, url: item.url });
+    }
+  }
+  return results;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // WIKIPEDIA POLICY WORD LISTS
 // ═══════════════════════════════════════════════════════════════════
 const WEASEL = [
@@ -561,7 +685,9 @@ function analyzeSourceBias(wikitext) {
     for (let i = 0; i < info.count; i++) ratings.push(info.rating);
   }
   const totalC = ratings.length, totalU = Object.values(unclassified).reduce((a,b)=>a+b,0);
-  if (ratings.length === 0) return { mean: null, median: null, std: null, label: "N/A", classified, unclassified, totalC, totalU, dist: {"-2":0,"-1":0,"0":0,"1":0,"2":0}, total: totalU };
+  // Also extract archive/book URLs for lazy resolution (before early return)
+  const archiveBookUrls = extractArchiveBookUrls(wikitext);
+  if (ratings.length === 0) return { mean: null, median: null, std: null, label: "N/A", classified, unclassified, totalC, totalU, dist: {"-2":0,"-1":0,"0":0,"1":0,"2":0}, total: totalU, archiveBookUrls };
   const mean = ratings.reduce((a,b)=>a+b,0) / ratings.length;
   const sorted = [...ratings].sort((a,b)=>a-b);
   const n = sorted.length;
@@ -572,7 +698,7 @@ function analyzeSourceBias(wikitext) {
   ratings.forEach(r => { dist[String(r)]++; });
   const roundedMean = Math.round(mean);
   const label = BIAS_LABELS[String(Math.max(-2, Math.min(2, roundedMean)))] || "Mixed";
-  return { mean, median, std, label, classified, unclassified, totalC, totalU, dist, total: totalC + totalU };
+  return { mean, median, std, label, classified, unclassified, totalC, totalU, dist, total: totalC + totalU, archiveBookUrls };
 }
 
 function countPhrases(text, phrases) {
@@ -1198,9 +1324,1056 @@ Be specific and cite examples from the text. Be balanced in your own assessment.
   );
 }
 
-function SourceBiasSection({ sb, topSources, allClassified, allUnclassified }) {
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE 10: SEMANTIC SIMILARITY & POLITICAL LEANING
+// All client-side: TF-IDF cosine similarity + lexicon-based political classifier
+// Based on: España-Bonet (2023), Church (2017), Savitzky-Golay (1964)
+// ═══════════════════════════════════════════════════════════════════
+
+// ── Math helpers ──
+function cosineSim(a, b) {
+  let dot = 0, magA = 0, magB = 0;
+  const allKeys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of allKeys) {
+    const va = a[k] || 0, vb = b[k] || 0;
+    dot += va * vb;
+    magA += va * va;
+    magB += vb * vb;
+  }
+  return dot / (Math.sqrt(magA) * Math.sqrt(magB) + 1e-10);
+}
+
+function savitzkyGolay(data, windowSize) {
+  if (!windowSize) windowSize = Math.max(3, Math.min(7, Math.floor(data.length / 3) | 1));
+  if (data.length < windowSize) return [...data];
+  const half = Math.floor(windowSize / 2);
+  return data.map((_, i) => {
+    let sum = 0, count = 0;
+    for (let j = Math.max(0, i - half); j <= Math.min(data.length - 1, i + half); j++) { sum += data[j]; count++; }
+    return sum / count;
+  });
+}
+
+function computeNDCG(scores, k) {
+  const n = Math.min(scores.length, k || scores.length);
+  if (n === 0) return 0;
+  let dcg = 0;
+  for (let i = 0; i < n; i++) dcg += scores[i] / Math.log2(i + 2);
+  const ideal = [...scores].sort((a, b) => b - a);
+  let idcg = 0;
+  for (let i = 0; i < n; i++) idcg += ideal[i] / Math.log2(i + 2);
+  return idcg === 0 ? 0 : dcg / idcg;
+}
+
+// ── TF-IDF Engine ──
+function tokenize(text) {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 2);
+}
+
+const STOPWORDS = new Set(["the","and","for","are","but","not","you","all","any","can","had","her","was","one","our","out","his","has","its","let","say","she","too","use","way","who","how","did","get","got","him","may","new","now","old","see","own","part","than","them","then","very","when","come","make","like","long","look","many","most","much","must","name","only","over","such","take","that","this","what","with","also","back","been","both","each","even","from","have","here","into","just","know","more","some","time","will","about","after","could","first","found","great","being","other","their","there","these","those","three","under","where","which","while","would","before","called","should","still","through","between","during","without","because","through","between","people","around","another","against","however","several","already","general","though","within","system","number","based","often","given","well","upon","among","using"]);
+
+function buildTFIDF(docs) {
+  const N = docs.length;
+  const tfs = docs.map(doc => {
+    const tokens = tokenize(doc).filter(w => !STOPWORDS.has(w));
+    const tf = {};
+    tokens.forEach(w => { tf[w] = (tf[w] || 0) + 1; });
+    const maxF = Math.max(...Object.values(tf), 1);
+    for (const w in tf) tf[w] = 0.5 + 0.5 * (tf[w] / maxF); // augmented TF
+    return tf;
+  });
+  // IDF
+  const df = {};
+  tfs.forEach(tf => { for (const w in tf) df[w] = (df[w] || 0) + 1; });
+  const idf = {};
+  for (const w in df) idf[w] = Math.log(N / df[w]);
+  // TF-IDF vectors
+  return tfs.map(tf => {
+    const vec = {};
+    for (const w in tf) vec[w] = tf[w] * (idf[w] || 0);
+    return vec;
+  });
+}
+
+// ── Intra-article section similarity ──
+function computeSectionSimilarityMatrix(sections) {
+  const names = Object.keys(sections);
+  const texts = Object.values(sections);
+  if (names.length < 2) return { names, matrix: [[1]], meanSim: 1, declineSlope: 0 };
+  const vectors = buildTFIDF(texts);
+  const matrix = names.map((_, i) => names.map((_, j) => cosineSim(vectors[i], vectors[j])));
+  // Consecutive section similarity
+  const consecutive = [];
+  for (let i = 0; i < names.length - 1; i++) consecutive.push(matrix[i][i + 1]);
+  const meanSim = consecutive.reduce((a, b) => a + b, 0) / consecutive.length;
+  // Similarity decline: early vs late
+  const half = Math.floor(consecutive.length / 2);
+  const earlyMean = half > 0 ? consecutive.slice(0, half).reduce((a, b) => a + b, 0) / half : meanSim;
+  const lateMean = half > 0 ? consecutive.slice(half).reduce((a, b) => a + b, 0) / (consecutive.length - half) : meanSim;
+  const declineSlope = earlyMean - lateMean;
+  return { names, matrix, consecutive, meanSim, declineSlope, earlyMean, lateMean };
+}
+
+// ── Political Leaning Lexicon ──
+const LEFT_TERMS = {
+  // Social justice & equity
+  "equity":0.7,"inequality":0.6,"marginalized":0.8,"oppression":0.8,"privilege":0.7,
+  "social justice":0.9,"systemic racism":0.9,"structural inequality":0.8,"intersectionality":0.9,
+  "discrimination":0.5,"solidarity":0.6,"grassroots":0.6,"progressive":0.8,"activism":0.5,
+  "diversity":0.5,"inclusion":0.5,"reparations":0.9,"colonialism":0.6,"imperialism":0.7,
+  "patriarchy":0.8,"feminist":0.6,"reproductive rights":0.8,"bodily autonomy":0.7,
+  // Economic left
+  "redistribute":0.8,"living wage":0.8,"universal healthcare":0.8,"public option":0.7,
+  "single payer":0.8,"collective bargaining":0.7,"labor rights":0.7,"workers rights":0.7,
+  "wealth gap":0.7,"income inequality":0.7,"corporate greed":0.8,"billionaire":0.4,
+  "austerity":0.5,"neoliberal":0.6,"exploitation":0.6,"wage theft":0.8,
+  "public housing":0.6,"food insecurity":0.5,"homelessness":0.3,
+  // Environment
+  "climate crisis":0.8,"climate justice":0.9,"fossil fuel":0.4,"renewable energy":0.4,
+  "environmental justice":0.8,"carbon footprint":0.5,"sustainability":0.3,
+  "green new deal":0.9,"divestment":0.6,
+  // Immigration
+  "undocumented":0.7,"asylum seeker":0.5,"refugee rights":0.6,"dreamers":0.7,
+  "family separation":0.7,"immigrant rights":0.7,"xenophobia":0.7,
+  // Criminal justice
+  "mass incarceration":0.8,"prison reform":0.7,"police brutality":0.8,"defund":0.9,
+  "abolish":0.7,"restorative justice":0.7,"bail reform":0.7,"over-policing":0.8,
+  // Gun control
+  "gun violence":0.6,"gun control":0.6,"assault weapons ban":0.8,"gun safety":0.6,
+  // Healthcare/social
+  "universal basic income":0.7,"affordable care":0.5,"mental health":0.3,
+  "harm reduction":0.6,"decriminalize":0.6,"legalize":0.4,
+};
+
+const RIGHT_TERMS = {
+  // Traditional values
+  "traditional values":0.8,"family values":0.7,"religious liberty":0.8,"religious freedom":0.7,
+  "judeo-christian":0.8,"faith-based":0.6,"moral decay":0.8,"sanctity of life":0.9,
+  "pro-life":0.8,"unborn":0.8,"natural law":0.7,"parental rights":0.7,
+  // Economic right
+  "free market":0.7,"deregulation":0.7,"tax cuts":0.7,"fiscal responsibility":0.6,
+  "small government":0.8,"limited government":0.8,"free enterprise":0.7,"entrepreneurship":0.3,
+  "overtaxed":0.7,"government overreach":0.8,"nanny state":0.9,"entitlement":0.5,
+  "welfare dependency":0.9,"handout":0.7,"job creator":0.7,"trickle down":0.5,
+  "privatize":0.6,"personal responsibility":0.7,"self-reliance":0.6,
+  "bureaucracy":0.4,"red tape":0.5,"government waste":0.7,
+  // National security
+  "national security":0.4,"border security":0.7,"secure the border":0.8,
+  "illegal alien":0.9,"illegal immigrant":0.7,"law and order":0.7,
+  "tough on crime":0.8,"second amendment":0.8,"right to bear arms":0.8,
+  "gun rights":0.7,"castle doctrine":0.7,"stand your ground":0.7,
+  "military strength":0.6,"peace through strength":0.7,"defense spending":0.5,
+  // Anti-left
+  "political correctness":0.7,"cancel culture":0.8,"woke":0.8,"virtue signaling":0.8,
+  "radical left":0.9,"socialist":0.7,"socialism":0.6,"communist":0.7,
+  "liberal elite":0.9,"mainstream media":0.7,"deep state":0.9,"big government":0.8,
+  "indoctrination":0.7,"thought police":0.8,
+  // Sovereignty
+  "sovereignty":0.5,"states rights":0.8,"constitutional":0.4,"founding fathers":0.6,
+  "originalist":0.7,"strict constructionist":0.7,"patriot":0.5,"nationalism":0.6,
+  "america first":0.9,"energy independence":0.6,
+};
+
+function classifySentencePolitical(sentence) {
+  const lower = sentence.toLowerCase();
+  let leftScore = 0, rightScore = 0, leftHits = 0, rightHits = 0;
+  for (const [phrase, weight] of Object.entries(LEFT_TERMS)) {
+    const re = new RegExp("\\b" + phrase.replace(/\s+/g, "\\s+") + "\\b", "i");
+    if (re.test(lower)) { leftScore += weight; leftHits++; }
+  }
+  for (const [phrase, weight] of Object.entries(RIGHT_TERMS)) {
+    const re = new RegExp("\\b" + phrase.replace(/\s+/g, "\\s+") + "\\b", "i");
+    if (re.test(lower)) { rightScore += weight; rightHits++; }
+  }
+  const total = leftScore + rightScore;
+  if (total === 0) return 0.5; // neutral
+  return rightScore / total; // 0=left, 1=right
+}
+
+function analyzePoliticalLeaning(plainText) {
+  const sentences = plainText.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 20);
+  const scores = sentences.map(s => classifySentencePolitical(s));
+  const mean = scores.reduce((a, b) => a + b, 0) / (scores.length || 1);
+
+  // nDCG on first 18% (Weinreich et al. 2008)
+  const topK = Math.max(1, Math.ceil(sentences.length * 0.18));
+  const topScores = scores.slice(0, topK);
+  // Left-leaning relevance = 1 - score (closer to 0 = more left)
+  const leftRelevance = topScores.map(s => Math.max(0, 1 - s * 2));  // high when s < 0.5
+  const rightRelevance = topScores.map(s => Math.max(0, s * 2 - 1)); // high when s > 0.5
+  const leftNDCG = computeNDCG(leftRelevance, topK);
+  const rightNDCG = computeNDCG(rightRelevance, topK);
+
+  // Find example sentences
+  const indexed = scores.map((s, i) => ({ score: s, sentence: sentences[i], i }));
+  const mostLeft = [...indexed].sort((a, b) => a.score - b.score).slice(0, 3);
+  const mostRight = [...indexed].sort((a, b) => b.score - a.score).slice(0, 3);
+  const leftExamples = mostLeft.filter(x => x.score < 0.4);
+  const rightExamples = mostRight.filter(x => x.score > 0.6);
+
+  // Bimodality: Hartigan's dip approximation via kurtosis
+  const variance = scores.reduce((s, v) => s + (v - mean) ** 2, 0) / (scores.length || 1);
+  const std = Math.sqrt(variance);
+  const kurtosis = scores.reduce((s, v) => s + ((v - mean) / (std || 1)) ** 4, 0) / (scores.length || 1) - 3;
+
+  return {
+    scores, sentences, mean, std, kurtosis,
+    leftNDCG, rightNDCG, topK,
+    leftExamples, rightExamples,
+    label: mean < 0.4 ? "Left-leaning" : mean > 0.6 ? "Right-leaning" : mean < 0.45 ? "Lean Left" : mean > 0.55 ? "Lean Right" : "Center"
+  };
+}
+
+// ── Module 10 React Component ──
+function SemanticPoliticalSection({ sections, plainText }) {
+  const [result, setResult] = useState(null);
+  const [computing, setComputing] = useState(false);
+
+  const runAnalysis = useCallback(() => {
+    setComputing(true);
+    // Use setTimeout to yield to UI before heavy computation
+    setTimeout(() => {
+      try {
+        const sim = computeSectionSimilarityMatrix(sections);
+        const pol = analyzePoliticalLeaning(plainText);
+        setResult({ sim, pol });
+      } catch (e) {
+        console.error("Module 10 failed:", e);
+        setResult({ error: e.message });
+      }
+      setComputing(false);
+    }, 30);
+  }, [sections, plainText]);
+
+  if (!result && !computing) {
+    return (
+      <Section title="Semantic Similarity & Political Leaning" defaultOpen={false}>
+        <p className="desc">
+          Section-level TF-IDF cosine similarity analysis and lexicon-based political orientation classification.
+          Based on España-Bonet (2023), Church (2017), and Savitzky-Golay (1964). Fully deterministic — no API key needed.
+        </p>
+        <button onClick={runAnalysis} className="btn-primary" style={{width:"100%",padding:"12px"}}>
+          Run Semantic & Political Analysis
+        </button>
+      </Section>
+    );
+  }
+
+  if (computing) {
+    return (
+      <Section title="Semantic Similarity & Political Leaning" defaultOpen={true}>
+        <div style={{textAlign:"center",padding:"24px",color:"#66605c"}}>
+          <div style={{fontSize:"18px",marginBottom:"8px"}}>Computing...</div>
+          <div style={{fontSize:"13px"}}>Building TF-IDF vectors and classifying sentences</div>
+        </div>
+      </Section>
+    );
+  }
+
+  if (result.error) {
+    return (
+      <Section title="Semantic Similarity & Political Leaning" defaultOpen={true}>
+        <div style={{color:"#990f3d",padding:"12px",background:"#fdf5f5",border:"1px solid #990f3d",fontSize:"13px"}}>Error: {result.error}</div>
+      </Section>
+    );
+  }
+
+  const { sim, pol } = result;
+  const smoothed = sim.consecutive ? savitzkyGolay(sim.consecutive) : [];
+
+  return (
+    <Section title="Semantic Similarity & Political Leaning" defaultOpen={true}>
+      <p className="desc">
+        Intra-article section coherence via TF-IDF cosine similarity, and sentence-level political orientation via keyword lexicon.
+        Methods: Church (2017), España-Bonet (2023), Savitzky-Golay smoothing (1964), nDCG positional bias (Wang et al. 2013).
+      </p>
+
+      {/* Part A: Section Similarity */}
+      <div style={{marginBottom:"20px"}}>
+        <h4 style={{fontSize:"14px",fontWeight:700,color:"#33302e",fontFamily:"'Playfair Display', serif",marginBottom:"10px",borderBottom:"1px solid #e8e4df",paddingBottom:"4px"}}>
+          Section-Level Semantic Coherence
+        </h4>
+        <div className="stats-grid stats-4">
+          <Stat label="Sections" value={sim.names.length} />
+          <Stat label="Mean Similarity" value={sim.meanSim.toFixed(3)} />
+          <Stat label="Early Mean" value={sim.earlyMean !== undefined ? sim.earlyMean.toFixed(3) : "—"} sub="First half" />
+          <Stat label="Late Mean" value={sim.lateMean !== undefined ? sim.lateMean.toFixed(3) : "—"} sub="Second half" />
+        </div>
+
+        {sim.declineSlope !== undefined && (
+          <div style={{fontSize:"13px",color:"#4a4643",margin:"8px 0",padding:"8px 12px",background:sim.declineSlope > 0.05 ? "#fff8f0" : "#f0f7f0",border:"1px solid " + (sim.declineSlope > 0.05 ? "#e8d5c4" : "#b8d4b8")}}>
+            {sim.declineSlope > 0.1
+              ? "⚠ Significant coherence decline (Δ=" + sim.declineSlope.toFixed(3) + "): later sections diverge substantially from the article's core framing, suggesting possible narrative drift or added tangential content."
+              : sim.declineSlope > 0.03
+              ? "Moderate coherence decline (Δ=" + sim.declineSlope.toFixed(3) + "): some thematic divergence in later sections, typical of longer articles."
+              : "✓ Stable coherence (Δ=" + sim.declineSlope.toFixed(3) + "): sections maintain consistent topical focus throughout."
+            }
+          </div>
+        )}
+
+        {/* Similarity Curve */}
+        {sim.consecutive && sim.consecutive.length > 1 && (() => {
+          const data = sim.consecutive;
+          const smooth = smoothed;
+          const w = 460, h = 180, padL = 45, padR = 10, padT = 15, padB = 35;
+          const plotW = w - padL - padR, plotH = h - padT - padB;
+          const n = data.length;
+          const toX = (i) => padL + (i / (n - 1)) * plotW;
+          const toY = (v) => padT + (1 - v) * plotH;
+          const rawPath = data.map((v, i) => (i===0?"M":"L") + toX(i).toFixed(1) + "," + toY(v).toFixed(1)).join(" ");
+          const smoothPath = smooth.map((v, i) => (i===0?"M":"L") + toX(i).toFixed(1) + "," + toY(v).toFixed(1)).join(" ");
+          return (
+            <div style={{overflowX:"auto"}}>
+              <div className="small-title" style={{marginBottom:"4px"}}>Consecutive Section Similarity (Savitzky-Golay smoothed)</div>
+              <svg width={w} height={h} style={{fontFamily:"'Source Sans 3',sans-serif",display:"block",maxWidth:"100%"}}>
+                {[0, 0.25, 0.5, 0.75, 1].map(v => (
+                  <g key={v}>
+                    <line x1={padL} y1={toY(v)} x2={w-padR} y2={toY(v)} stroke="#e8e4df" strokeDasharray={v===0||v===1?"":"3,3"} />
+                    <text x={padL-4} y={toY(v)+3} textAnchor="end" fontSize="9" fill="#a39d97">{v.toFixed(2)}</text>
+                  </g>
+                ))}
+                <path d={rawPath} fill="none" stroke="#c0b8b0" strokeWidth="1" opacity="0.5" />
+                <path d={smoothPath} fill="none" stroke="#8b2500" strokeWidth="2" />
+                {data.map((v, i) => (
+                  <circle key={i} cx={toX(i)} cy={toY(v)} r="3" fill="#c0b8b0" opacity="0.6" />
+                ))}
+                <text x={padL + plotW/2} y={h - 4} textAnchor="middle" fontSize="10" fill="#66605c">Section index →</text>
+                <text x={12} y={padT + plotH/2} textAnchor="middle" fontSize="10" fill="#66605c" transform={"rotate(-90," + 12 + "," + (padT+plotH/2) + ")"}>Cosine sim</text>
+              </svg>
+            </div>
+          );
+        })()}
+
+        {/* Heatmap */}
+        {sim.names.length >= 3 && sim.names.length <= 30 && (() => {
+          const n = sim.names.length;
+          const cellSize = Math.max(16, Math.min(32, Math.floor(380 / n)));
+          const labelW = Math.min(130, 10 + n * 2);
+          const svgW = labelW + n * cellSize + 10;
+          const svgH = labelW + n * cellSize + 10;
+          return (
+            <div style={{marginTop:"12px"}}>
+              <div className="small-title" style={{marginBottom:"4px"}}>Section Similarity Matrix</div>
+              <div style={{overflowX:"auto",maxWidth:"100%"}}>
+                <svg width={svgW} height={svgH} style={{fontFamily:"'Source Sans 3',sans-serif",fontSize: n > 15 ? "7px" : "9px"}}>
+                  {sim.names.map((l, i) => (
+                    <text key={"cl"+i} x={labelW + i*cellSize + cellSize/2} y={labelW - 4} textAnchor="end"
+                      transform={"rotate(-45," + (labelW + i*cellSize + cellSize/2) + "," + (labelW-4) + ")"} fill="#66605c">
+                      {l.length > 16 ? l.slice(0,14) + "…" : l}
+                    </text>
+                  ))}
+                  {sim.names.map((rl, ri) => (
+                    <g key={"r"+ri}>
+                      <text x={labelW-4} y={labelW + ri*cellSize + cellSize/2 + 3} textAnchor="end" fill="#66605c">
+                        {rl.length > 16 ? rl.slice(0,14) + "…" : rl}
+                      </text>
+                      {sim.matrix[ri].map((val, ci) => {
+                        const hue = val > 0.6 ? 140 : val > 0.3 ? 50 : 0;
+                        const sat = Math.round(30 + val * 55);
+                        const light = Math.round(95 - val * 45);
+                        return (
+                          <g key={"c"+ri+"-"+ci}>
+                            <rect x={labelW + ci*cellSize} y={labelW + ri*cellSize} width={cellSize-1} height={cellSize-1}
+                              fill={ri===ci ? "#33302e" : "hsl("+hue+","+sat+"%,"+light+"%)"} />
+                            {cellSize >= 24 && (
+                              <text x={labelW + ci*cellSize + cellSize/2} y={labelW + ri*cellSize + cellSize/2 + 3}
+                                textAnchor="middle" fontSize="7" fill={val > 0.5 || ri===ci ? "#fff" : "#333"}>
+                                {ri===ci ? "1.0" : val.toFixed(2)}
+                              </text>
+                            )}
+                          </g>
+                        );
+                      })}
+                    </g>
+                  ))}
+                </svg>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Part B: Political Leaning */}
+      <div>
+        <h4 style={{fontSize:"14px",fontWeight:700,color:"#33302e",fontFamily:"'Playfair Display', serif",marginBottom:"10px",borderBottom:"1px solid #e8e4df",paddingBottom:"4px"}}>
+          Political Orientation Profile
+        </h4>
+        <p className="desc" style={{marginBottom:"10px"}}>
+          Each sentence scored 0 (left-leaning) to 1 (right-leaning) via dual-lexicon keyword classification. Scale mirrors España-Bonet (2023).
+        </p>
+        <div className="stats-grid stats-4">
+          <Stat label="Mean Leaning" value={pol.mean.toFixed(3)} sub={pol.label} />
+          <Stat label="Std Dev" value={pol.std.toFixed(3)} />
+          <Stat label="Sentences" value={pol.scores.length} />
+          <Stat label="Kurtosis" value={pol.kurtosis.toFixed(2)} sub={pol.kurtosis < -1 ? "Bimodal" : pol.kurtosis < 0 ? "Platykurtic" : "Leptokurtic"} />
+        </div>
+
+        {/* Distribution */}
+        {(() => {
+          const bins = Array(10).fill(0);
+          pol.scores.forEach(s => { bins[Math.min(9, Math.floor(s * 10))]++; });
+          const maxBin = Math.max(...bins, 1);
+          const w = 420, h = 150, padL = 30, padB = 28;
+          const barW = Math.floor((w - padL - 10) / 10) - 2;
+          const plotH = h - padB - 10;
+          const labels = ["0.0","0.1","0.2","0.3","0.4","0.5","0.6","0.7","0.8","0.9"];
+          return (
+            <div style={{margin:"10px 0"}}>
+              <div className="small-title" style={{marginBottom:"4px"}}>Political Leaning Distribution</div>
+              <svg width={w} height={h} style={{fontFamily:"'Source Sans 3',sans-serif",display:"block",maxWidth:"100%"}}>
+                <defs><linearGradient id="polGrad10" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#082a75"/><stop offset="50%" stopColor="#a39d97"/><stop offset="100%" stopColor="#990f3d"/>
+                </linearGradient></defs>
+                <rect x={padL} y={h-padB+8} width={w-padL-10} height={4} fill="url(#polGrad10)" rx="2"/>
+                {bins.map((count, i) => {
+                  const barH = (count / maxBin) * plotH;
+                  const x = padL + i * (barW + 2);
+                  const hue = i < 4 ? 220 : i < 6 ? 45 : 0;
+                  const sat = 40 + Math.abs(i - 5) * 8;
+                  return (
+                    <g key={i}>
+                      <rect x={x} y={h - padB - barH + 4} width={barW} height={barH} fill={"hsl("+hue+","+sat+"%,62%)"} />
+                      {count > 0 && <text x={x+barW/2} y={h-padB-barH} textAnchor="middle" fontSize="9" fill="#66605c">{count}</text>}
+                      <text x={x+barW/2} y={h-6} textAnchor="middle" fontSize="8" fill="#a39d97">{labels[i]}</text>
+                    </g>
+                  );
+                })}
+                <text x={padL} y={h} fontSize="9" fill="#082a75" fontWeight="600">← Left</text>
+                <text x={w-10} y={h} textAnchor="end" fontSize="9" fill="#990f3d" fontWeight="600">Right →</text>
+              </svg>
+            </div>
+          );
+        })()}
+
+        {/* nDCG Positional Bias */}
+        <div style={{margin:"14px 0"}}>
+          <div className="small-title" style={{marginBottom:"6px"}}>Positional Bias (nDCG of first 18% of text — {pol.topK} sentences)</div>
+          <p className="desc" style={{marginBottom:"8px"}}>Higher nDCG = that orientation's content is concentrated toward the top. Based on Weinreich et al. (2008): users read ~18% of page words.</p>
+          <div className="metric-row">
+            <span className="metric-label" style={{color:"#082a75",fontWeight:600,minWidth:"120px"}}>Left-leaning nDCG</span>
+            <div className="metric-track"><div className="metric-fill" style={{width: Math.min(100, pol.leftNDCG*100)+"%", background:"#2e6c9e"}} /></div>
+            <span className="metric-value">{pol.leftNDCG.toFixed(3)}</span>
+          </div>
+          <div className="metric-row" style={{marginTop:"6px"}}>
+            <span className="metric-label" style={{color:"#990f3d",fontWeight:600,minWidth:"120px"}}>Right-leaning nDCG</span>
+            <div className="metric-track"><div className="metric-fill" style={{width: Math.min(100, pol.rightNDCG*100)+"%", background:"#c0392b"}} /></div>
+            <span className="metric-value">{pol.rightNDCG.toFixed(3)}</span>
+          </div>
+          <div style={{fontSize:"12px",color:"#4a4643",marginTop:"8px",padding:"6px 10px",background:"#f8f5f0",border:"1px solid #e8e4df"}}>
+            {"Δ = " + Math.abs(pol.leftNDCG - pol.rightNDCG).toFixed(3) + " — "}
+            {Math.abs(pol.leftNDCG - pol.rightNDCG) < 0.05 ? "Balanced: neither orientation is preferentially positioned at the top."
+              : pol.leftNDCG > pol.rightNDCG ? "Left-leaning content is more concentrated toward the article's opening."
+              : "Right-leaning content is more concentrated toward the article's opening."}
+          </div>
+        </div>
+
+        {/* Example sentences */}
+        {(pol.leftExamples.length > 0 || pol.rightExamples.length > 0) && (
+          <div style={{marginTop:"14px"}}>
+            <div className="small-title" style={{marginBottom:"8px"}}>Example Classified Sentences</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+              <div>
+                <div style={{fontSize:"11px",fontWeight:700,color:"#082a75",marginBottom:"4px",textTransform:"uppercase",letterSpacing:"0.04em"}}>Most Left-Leaning</div>
+                {pol.leftExamples.length > 0 ? pol.leftExamples.map((ex, i) => (
+                  <div key={i} style={{fontSize:"12px",color:"#4a4643",padding:"6px 8px",marginBottom:"4px",background:"#f0f4fa",border:"1px solid #d0dcea",lineHeight:"1.5"}}>
+                    <span style={{fontSize:"10px",color:"#082a75",fontWeight:600}}>{ex.score.toFixed(2)}</span>{" "}{ex.sentence.slice(0, 180)}{ex.sentence.length > 180 ? "…" : ""}
+                  </div>
+                )) : <div style={{fontSize:"12px",color:"#a39d97",fontStyle:"italic"}}>No strongly left-leaning sentences detected</div>}
+              </div>
+              <div>
+                <div style={{fontSize:"11px",fontWeight:700,color:"#990f3d",marginBottom:"4px",textTransform:"uppercase",letterSpacing:"0.04em"}}>Most Right-Leaning</div>
+                {pol.rightExamples.length > 0 ? pol.rightExamples.map((ex, i) => (
+                  <div key={i} style={{fontSize:"12px",color:"#4a4643",padding:"6px 8px",marginBottom:"4px",background:"#faf0f0",border:"1px solid #e0c8c8",lineHeight:"1.5"}}>
+                    <span style={{fontSize:"10px",color:"#990f3d",fontWeight:600}}>{ex.score.toFixed(2)}</span>{" "}{ex.sentence.slice(0, 180)}{ex.sentence.length > 180 ? "…" : ""}
+                  </div>
+                )) : <div style={{fontSize:"12px",color:"#a39d97",fontStyle:"italic"}}>No strongly right-leaning sentences detected</div>}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE 11: ADVANCED BIAS METRICS
+// Client-side: Readability, Propaganda, Attribution, Emotional Manipulation
+// Weasel Words, Passive Voice, Lexical Diversity & Density
+// Refs: Flesch (1948), Kincaid (1975), Gunning (1952), McLaughlin (1969),
+//       Recasens et al. (Stanford, 2013), Menzner & Leidner (2024), Hyland (2005)
+// ═══════════════════════════════════════════════════════════════════
+
+// ── Syllable counter (heuristic) ──
+function countSyllables(word) {
+  word = word.toLowerCase().replace(/[^a-z]/g, "");
+  if (word.length <= 2) return 1;
+  word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, "");
+  word = word.replace(/^y/, "");
+  const m = word.match(/[aeiouy]{1,2}/g);
+  return m ? m.length : 1;
+}
+
+// ── 11A: Readability Metrics ──
+function analyzeReadability(plainText) {
+  const sentences = plainText.split(/[.!?]+/).filter(s => s.trim().length > 5);
+  const words = plainText.split(/\s+/).filter(w => w.length > 0);
+  const numSentences = Math.max(1, sentences.length);
+  const numWords = Math.max(1, words.length);
+  const numChars = words.join("").length;
+  let totalSyllables = 0, complexWords = 0;
+  words.forEach(w => {
+    const s = countSyllables(w);
+    totalSyllables += s;
+    if (s >= 3) complexWords++;
+  });
+  const ASL = numWords / numSentences;
+  const ASW = totalSyllables / numWords;
+  const AWL = numChars / numWords;
+  const fleschEase = 206.835 - 1.015 * ASL - 84.6 * ASW;
+  const fleschKincaid = 0.39 * ASL + 11.8 * ASW - 15.59;
+  const fog = 0.4 * (ASL + 100 * (complexWords / numWords));
+  const smog = 1.0430 * Math.sqrt(complexWords * (30 / numSentences)) + 3.1291;
+  const ari = 4.71 * AWL + 0.5 * ASL - 21.43;
+  const L = (numChars / numWords) * 100;
+  const S = (numSentences / numWords) * 100;
+  const colemanLiau = 0.0588 * L - 0.296 * S - 15.8;
+  const grades = [fleschKincaid, fog, smog, ari, colemanLiau].filter(g => isFinite(g) && g > 0);
+  const consensus = grades.length ? grades.reduce((a, b) => a + b, 0) / grades.length : 0;
+  return {
+    fleschEase: +Math.max(0, Math.min(100, fleschEase)).toFixed(1),
+    fleschKincaid: +Math.max(0, fleschKincaid).toFixed(1),
+    fog: +Math.max(0, fog).toFixed(1),
+    smog: +Math.max(0, smog).toFixed(1),
+    ari: +Math.max(0, ari).toFixed(1),
+    colemanLiau: +Math.max(0, colemanLiau).toFixed(1),
+    consensus: +consensus.toFixed(1),
+    numSentences, numWords, totalSyllables, complexWords,
+    ASL: +ASL.toFixed(1), ASW: +ASW.toFixed(2),
+    label: consensus > 16 ? "Graduate" : consensus > 12 ? "College" : consensus > 8 ? "High School" : consensus > 5 ? "Middle School" : "Elementary"
+  };
+}
+
+// ── 11B: Propaganda & Rhetorical Technique Detection ──
+const PROPAGANDA_PATTERNS = {
+  "Loaded Language": { desc: "Emotionally charged words to influence beyond their meaning", patterns: [/\b(outrageous|shocking|devastating|horrific|terrifying|alarming|appalling|disgraceful|atrocity|nightmare|catastrophe|travesty|scandal|slaughter|butcher|regime|cronies|mob|thugs|radical|extremist|militant|fanatic|tyrant|puppet|sham|hoax|witch hunt|rigged|stolen)\b/gi], weight: 1.0 },
+  "Appeal to Emotion": { desc: "Arguments targeting feelings rather than logic", patterns: [/\b(think of the children|innocent victims|heartbreaking|unthinkable|imagine if|how would you feel|no parent should|every mother|blood on.{0,20}hands|tears|suffering|agony|anguish)\b/gi], weight: 1.2 },
+  "Appeal to Authority": { desc: "Citing authority figures as definitive proof", patterns: [/\b(experts say|scientists agree|studies show|research proves|according to experts|leading authorities|top scientists|world-renowned)\b/gi], weight: 0.6 },
+  "Bandwagon": { desc: "Implying everyone agrees, so you should too", patterns: [/\b(everyone knows|most people|the majority|widespread consensus|growing number|popular opinion|common knowledge|no one disputes|undeniable)\b/gi], weight: 0.8 },
+  "False Dichotomy": { desc: "Presenting only two options when more exist", patterns: [/\b(either.{5,50}or\b|you'?re either.{5,30}or|there are only two|the only (option|choice|alternative)|no middle ground)\b/gi], weight: 1.0 },
+  "Hasty Generalization": { desc: "Drawing broad conclusions from limited evidence", patterns: [/\b(always|never|every single|all of them|none of them|without exception|in every case|invariably|universally)\b/gi], weight: 0.5 },
+  "Straw Man": { desc: "Misrepresenting opposing views to attack them", patterns: [/\b(critics claim|opponents argue|some would have you believe|they want you to think)\b/gi], weight: 0.9 },
+  "Ad Hominem": { desc: "Attacking the person instead of the argument", patterns: [/\b(is (a )?liar|corrupt|incompetent|hypocrit|bigot|racist|fascist|communist|elitist|puppet).{0,10}(who|that|and)/gi], weight: 1.1 },
+  "Unsubstantiated Claims": { desc: "Assertions without evidence or citations", patterns: [/\b(it is (well )?known|it is (widely )?believed|sources say|some say|people are saying|many believe|reportedly|allegedly)\b/gi], weight: 0.7 },
+  "Speculation": { desc: "Presenting guesses as likely facts", patterns: [/\b(could (potentially|possibly|well)|might (very )?well|is likely to|is expected to|will (probably|likely|almost certainly)|raises the (specter|spectre|possibility))\b/gi], weight: 0.5 },
+  "Whataboutism": { desc: "Deflecting criticism by pointing to others' faults", patterns: [/\b(what about|but what about|how about when|where was the outrage when|the other side also)\b/gi], weight: 0.9 },
+  "Cherry Picking": { desc: "Selecting only facts supporting a predetermined conclusion", patterns: [/\b(if you look at.{5,30}alone|focusing (only|solely|exclusively) on|ignoring the fact|conveniently (omit|forget|overlook))\b/gi], weight: 0.8 },
+  "Emotional Sensationalism": { desc: "Exaggerating for dramatic effect", patterns: [/\b(unprecedented|bombshell|explosive|earth-shattering|game-changing|seismic|monumental|crisis|emergency|breaking point|tipping point|point of no return)\b/gi], weight: 0.7 },
+  "Insinuative Questioning": { desc: "Using questions to imply claims without stating them", patterns: [/\b(one (has to|must) (wonder|ask)|raises (the )?questions?|begs the question|isn'?t it (curious|strange|odd|suspicious))\b/gi], weight: 0.6 },
+};
+
+function detectPropaganda(plainText) {
+  const results = {};
+  let totalHits = 0, totalWeight = 0;
+  const examples = [];
+  for (const [technique, info] of Object.entries(PROPAGANDA_PATTERNS)) {
+    let count = 0;
+    const matches = [];
+    for (const pattern of info.patterns) {
+      const re = new RegExp(pattern.source, pattern.flags);
+      let m;
+      while ((m = re.exec(plainText)) !== null) {
+        count++;
+        if (matches.length < 3) {
+          const start = Math.max(0, m.index - 30);
+          const end = Math.min(plainText.length, m.index + m[0].length + 30);
+          matches.push("…" + plainText.slice(start, end).replace(/\n/g, " ") + "…");
+        }
+      }
+    }
+    if (count > 0) {
+      results[technique] = { count, weight: info.weight, desc: info.desc, matches };
+      totalHits += count;
+      totalWeight += count * info.weight;
+      examples.push(...matches.slice(0, 2).map(ex => ({ technique, text: ex })));
+    }
+  }
+  const sentences = plainText.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  const density = sentences.length > 0 ? totalHits / sentences.length : 0;
+  const score = Math.min(1, totalWeight / Math.max(1, sentences.length) * 2);
+  return {
+    techniques: results, totalHits, totalWeight: +totalWeight.toFixed(1),
+    density: +density.toFixed(4), score: +score.toFixed(3),
+    examples: examples.slice(0, 8),
+    label: score > 0.3 ? "High propaganda density" : score > 0.15 ? "Moderate rhetorical manipulation" : score > 0.05 ? "Low propaganda signals" : "Minimal rhetorical techniques"
+  };
+}
+
+// ── 11C: Attribution / Quotation Balance ──
+function analyzeAttribution(plainText) {
+  const directQuotes = plainText.match(/"[^"]{10,300}"/g) || [];
+  const singleQuotes = plainText.match(/'[^']{10,300}'/g) || [];
+  const allQuotes = [...directQuotes, ...singleQuotes];
+  const attrPatterns = plainText.match(/\b(said|stated|argued|claimed|noted|wrote|explained|told|according to|added|warned|insisted|suggested|pointed out|emphasized|acknowledged|contended|maintained|declared|remarked|testified|asserted|responded)\b/gi) || [];
+  const heHim = (plainText.match(/\b(he|him|his|himself)\b/gi) || []).length;
+  const sheHer = (plainText.match(/\b(she|her|hers|herself)\b/gi) || []).length;
+  const they = (plainText.match(/\b(they|them|their|theirs|themselves)\b/gi) || []).length;
+  const totalPronoun = heHim + sheHer + they || 1;
+  const genderRatio = sheHer / (heHim || 1);
+  const namedSources = plainText.match(/(?:said|stated|argued|claimed|noted|wrote|according to)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})/g) || [];
+  return {
+    directQuotes: allQuotes.length, attributionVerbs: attrPatterns.length,
+    heHim, sheHer, they, genderRatio: +genderRatio.toFixed(2),
+    malePercent: +(heHim / totalPronoun * 100).toFixed(1),
+    femalePercent: +(sheHer / totalPronoun * 100).toFixed(1),
+    neutralPercent: +(they / totalPronoun * 100).toFixed(1),
+    namedSources: namedSources.length,
+    uniqueSources: new Set(namedSources.map(s => s.replace(/^(said|stated|argued|claimed|noted|wrote|according to)\s+/i, "").trim())).size,
+    label: genderRatio > 0.8 && genderRatio < 1.25 ? "Balanced" : genderRatio < 0.5 ? "Male-dominated" : genderRatio > 2 ? "Female-dominated" : genderRatio < 0.8 ? "Male-leaning" : "Female-leaning"
+  };
+}
+
+// ── 11D: Emotional Manipulation Score ──
+const EMOTION_LEXICON = {
+  fear: ["afraid","alarm","anxiety","anxious","apprehension","concern","crisis","danger","dread","emergency","fear","frightened","horrified","insecure","menace","nightmare","panic","paranoia","peril","risk","scared","terror","terrified","terrorize","threat","threatened","unsafe","vulnerable","worry","worrying"],
+  anger: ["anger","angry","appalled","betray","betrayed","contempt","corrupt","disgrace","disgusted","enraged","frustrated","fury","hate","hatred","hostile","indignant","infuriated","injustice","offended","outraged","resentful","revenge","revolted","vengeful","wrathful"],
+  hope: ["aspire","bright","encourage","faith","hope","hopeful","inspire","optimism","optimistic","possibility","promise","promising","prospect","uplifting","vision","visionary"],
+  pride: ["achievement","accomplished","glory","great","greatest","historic","legacy","magnificent","national pride","patriotic","proud","remarkable","success","triumph","triumphant","victorious","victory"],
+};
+
+function analyzeEmotionalManipulation(plainText) {
+  const lower = plainText.toLowerCase();
+  const words = lower.split(/\s+/).length || 1;
+  const result = {};
+  let totalEmotional = 0;
+  for (const [emotion, terms] of Object.entries(EMOTION_LEXICON)) {
+    let count = 0;
+    const found = [];
+    for (const term of terms) {
+      const re = new RegExp("\\b" + term + "\\b", "gi");
+      const matches = lower.match(re);
+      if (matches) { count += matches.length; if (found.length < 3) found.push(term); }
+    }
+    result[emotion] = { count, density: +(count / words * 1000).toFixed(2), topTerms: found };
+    totalEmotional += count;
+  }
+  const manipulationScore = Math.min(1, (result.fear.count * 1.5 + result.anger.count * 1.3) / Math.max(1, words) * 50);
+  return {
+    emotions: result, totalEmotional,
+    density: +(totalEmotional / words * 1000).toFixed(2),
+    manipulationScore: +manipulationScore.toFixed(3),
+    dominantEmotion: Object.entries(result).sort((a, b) => b[1].count - a[1].count)[0]?.[0] || "none",
+    label: manipulationScore > 0.3 ? "High emotional manipulation" : manipulationScore > 0.15 ? "Moderate emotional appeal" : manipulationScore > 0.05 ? "Low emotional language" : "Neutral/factual tone"
+  };
+}
+
+// ── 11E: Weasel Words, Hedging & Peacock Terms (Recasens et al. 2013, Hyland 2005) ──
+const WEASEL_WORDS = [
+  "some people","some say","many people","some argue","it has been said","it has been suggested",
+  "it has been claimed","it is believed","it is thought","it is said","it is rumored",
+  "critics say","observers note","commentators suggest","experts believe","sources say",
+  "people say","they say","one might argue","some feel","some think",
+  "there are those who","some would say","many feel","research suggests","studies suggest",
+  "it could be argued","it may be said","questions have been raised","concerns have been raised",
+  "some analysts","some observers","some critics","some scholars","certain experts",
+];
+const HEDGE_WORDS = [
+  "perhaps","possibly","probably","maybe","somewhat","rather","fairly","quite",
+  "relatively","apparently","seemingly","allegedly","supposedly","reportedly",
+  "might","could","may","seem","tend","appear","suggest","indicate",
+  "arguably","conceivably","potentially","approximately","roughly",
+  "in some sense","to some extent","to a certain degree","more or less",
+];
+const PEACOCK_TERMS = [
+  "legendary","iconic","renowned","prestigious","world-class","groundbreaking",
+  "pioneering","trailblazing","visionary","remarkable","extraordinary","exceptional",
+  "unparalleled","unmatched","unrivaled","one of the most","widely regarded",
+  "widely considered","among the greatest","among the best","highly acclaimed",
+  "critically acclaimed","universally praised","celebrated","illustrious","eminent",
+  "distinguished","preeminent","foremost","leading","prominent","notable","influential",
+  "seminal","landmark","definitive","classic","masterpiece","tour de force",
+  "best known","most famous","most popular","most important","most significant",
+  "most influential","greatest","finest","best","worst","most controversial",
+];
+
+function analyzeWeaselHedgePeacock(plainText) {
+  const lower = plainText.toLowerCase();
+  const words = lower.split(/\s+/).length || 1;
+  let weaselCount = 0, hedgeCount = 0, peacockCount = 0;
+  const weaselExamples = [], hedgeExamples = [], peacockExamples = [];
+  
+  for (const phrase of WEASEL_WORDS) {
+    const re = new RegExp("\\b" + phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "gi");
+    let m;
+    while ((m = re.exec(lower)) !== null) {
+      weaselCount++;
+      if (weaselExamples.length < 5) {
+        const s = Math.max(0, m.index - 20);
+        const e = Math.min(lower.length, m.index + m[0].length + 20);
+        weaselExamples.push({ match: m[0], context: "…" + plainText.slice(s, e).replace(/\n/g, " ") + "…" });
+      }
+    }
+  }
+  for (const word of HEDGE_WORDS) {
+    const re = new RegExp("\\b" + word + "\\b", "gi");
+    const matches = lower.match(re);
+    if (matches) {
+      hedgeCount += matches.length;
+      if (hedgeExamples.length < 5) hedgeExamples.push(word + " ×" + matches.length);
+    }
+  }
+  for (const term of PEACOCK_TERMS) {
+    const re = new RegExp("\\b" + term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "gi");
+    let m;
+    while ((m = re.exec(lower)) !== null) {
+      peacockCount++;
+      if (peacockExamples.length < 5) {
+        const s = Math.max(0, m.index - 20);
+        const e = Math.min(lower.length, m.index + m[0].length + 20);
+        peacockExamples.push({ match: m[0], context: "…" + plainText.slice(s, e).replace(/\n/g, " ") + "…" });
+      }
+    }
+  }
+  const total = weaselCount + hedgeCount + peacockCount;
+  return {
+    weaselCount, hedgeCount, peacockCount, total,
+    weaselPer1k: +(weaselCount / words * 1000).toFixed(2),
+    hedgePer1k: +(hedgeCount / words * 1000).toFixed(2),
+    peacockPer1k: +(peacockCount / words * 1000).toFixed(2),
+    totalPer1k: +(total / words * 1000).toFixed(2),
+    weaselExamples, hedgeExamples, peacockExamples,
+    label: total / words * 1000 > 30 ? "Heavy hedging/weaseling" : total / words * 1000 > 15 ? "Moderate vagueness" : total / words * 1000 > 5 ? "Some hedging" : "Direct/factual"
+  };
+}
+
+// ── 11F: Passive Voice Ratio ──
+function analyzePassiveVoice(plainText) {
+  const sentences = plainText.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  let passiveCount = 0;
+  const passiveExamples = [];
+  const passiveRe = /\b(was|were|is|are|been|being|be|am)\s+(being\s+)?([\w]+ed|[\w]+en|built|born|brought|bought|caught|chosen|dealt|done|drawn|driven|eaten|fallen|felt|found|forgotten|forgiven|frozen|given|gone|grown|heard|held|hidden|hit|hurt|kept|known|laid|led|left|lent|lost|made|meant|met|paid|put|read|ridden|risen|run|said|seen|sent|set|shaken|shown|shot|shut|sold|spoken|spent|stood|stolen|struck|sworn|taken|taught|thought|thrown|told|torn|understood|woken|won|worn|written)\b/gi;
+  for (const sent of sentences) {
+    if (passiveRe.test(sent)) {
+      passiveCount++;
+      if (passiveExamples.length < 5) {
+        passiveExamples.push(sent.trim().slice(0, 120));
+      }
+      passiveRe.lastIndex = 0;
+    }
+  }
+  const ratio = sentences.length > 0 ? passiveCount / sentences.length : 0;
+  return {
+    passiveCount, totalSentences: sentences.length,
+    ratio: +ratio.toFixed(3),
+    percent: +(ratio * 100).toFixed(1),
+    passiveExamples,
+    label: ratio > 0.4 ? "Heavy passive voice" : ratio > 0.25 ? "Moderate passive voice" : ratio > 0.1 ? "Some passive voice" : "Mostly active voice"
+  };
+}
+
+// ── 11G: Lexical Diversity & Density ──
+function analyzeLexicalMetrics(plainText) {
+  const tokens = plainText.toLowerCase().replace(/[^a-z\s'-]/g, " ").split(/\s+/).filter(w => w.length > 1);
+  const N = tokens.length || 1;
+  const freqMap = {};
+  tokens.forEach(t => { freqMap[t] = (freqMap[t] || 0) + 1; });
+  const types = Object.keys(freqMap);
+  const V = types.length || 1;
+  const hapaxes = types.filter(t => freqMap[t] === 1);
+  const disLegomena = types.filter(t => freqMap[t] === 2);
+
+  // Type-Token Ratio
+  const ttr = V / N;
+  // Root TTR (Guiraud 1960)
+  const rootTTR = V / Math.sqrt(N);
+  // Corrected TTR (Carroll 1964)
+  const correctedTTR = V / Math.sqrt(2 * N);
+  // Log TTR / Herdan's C (Herdan 1960)
+  const herdanC = Math.log(V) / Math.log(N);
+  // Hapax/Token ratio
+  const hapaxRatio = hapaxes.length / N;
+  // Hapax/Type ratio
+  const hapaxTypeRatio = hapaxes.length / V;
+
+  // Lexical Density: content words / total words
+  const FUNCTION_WORDS = new Set(["the","a","an","and","or","but","in","on","at","to","for","of","with","by","from","as","is","was","are","were","be","been","being","have","has","had","do","does","did","will","would","shall","should","may","might","can","could","must","this","that","these","those","it","its","i","me","my","we","us","our","you","your","he","him","his","she","her","they","them","their","what","which","who","whom","whose","where","when","how","why","not","no","nor","if","then","than","so","very","just","also","about","up","out","into","over","after","before","between","under","through","during","each","few","more","most","other","some","such","only","own","same","too","very","there","here","again","once","further","all","any","both","every","many","much","several","another","because","since","while","although","though","even","already","still","yet","now","well","however","therefore","thus","hence","instead","rather","quite","enough"]);
+  const contentWords = tokens.filter(t => !FUNCTION_WORDS.has(t) && t.length > 2);
+  const lexicalDensity = contentWords.length / N;
+
+  // Shannon entropy
+  let entropy = 0;
+  for (const t of types) {
+    const p = freqMap[t] / N;
+    if (p > 0) entropy -= p * Math.log2(p);
+  }
+  // Normalized entropy (0-1)
+  const maxEntropy = Math.log2(V);
+  const normalizedEntropy = maxEntropy > 0 ? entropy / maxEntropy : 0;
+
+  return {
+    tokens: N, types: V,
+    ttr: +ttr.toFixed(4), rootTTR: +rootTTR.toFixed(2),
+    correctedTTR: +correctedTTR.toFixed(2), herdanC: +herdanC.toFixed(4),
+    hapaxes: hapaxes.length, disLegomena: disLegomena.length,
+    hapaxRatio: +hapaxRatio.toFixed(4), hapaxTypeRatio: +hapaxTypeRatio.toFixed(4),
+    lexicalDensity: +(lexicalDensity * 100).toFixed(1),
+    entropy: +entropy.toFixed(2), normalizedEntropy: +normalizedEntropy.toFixed(4),
+    diversityLabel: ttr > 0.7 ? "Very high diversity" : ttr > 0.5 ? "High diversity" : ttr > 0.3 ? "Moderate diversity" : "Low diversity (repetitive)",
+    densityLabel: lexicalDensity > 0.6 ? "Dense (academic)" : lexicalDensity > 0.5 ? "Moderately dense" : lexicalDensity > 0.4 ? "Average density" : "Light (conversational)"
+  };
+}
+
+// ── Module 11 React Component ──
+function AdvancedBiasMetricsSection({ plainText }) {
+  const [result, setResult] = useState(null);
+  const [computing, setComputing] = useState(false);
+
+  const runAnalysis = () => {
+    setComputing(true);
+    setTimeout(() => {
+      const readability = analyzeReadability(plainText);
+      const propaganda = detectPropaganda(plainText);
+      const attribution = analyzeAttribution(plainText);
+      const emotional = analyzeEmotionalManipulation(plainText);
+      const weasel = analyzeWeaselHedgePeacock(plainText);
+      const passive = analyzePassiveVoice(plainText);
+      const lexical = analyzeLexicalMetrics(plainText);
+      setResult({ readability, propaganda, attribution, emotional, weasel, passive, lexical });
+      setComputing(false);
+    }, 30);
+  };
+
+  return React.createElement(Section, { title: "Module 11: Advanced Bias Metrics" },
+      !result && !computing && React.createElement("div", { style: { textAlign: "center", padding: "18px" } },
+        React.createElement("button", {
+          onClick: runAnalysis,
+          style: { background: "#a0522d", color: "#fff", border: "none", borderRadius: "6px", padding: "10px 28px", fontSize: "14px", cursor: "pointer", fontWeight: 600 }
+        }, "▶ Run Advanced Bias Metrics"),
+        React.createElement("div", { style: { fontSize: "12px", color: "#8b7355", marginTop: "8px" } },
+          "Client-side: Flesch-Kincaid, Gunning Fog, SMOG, ARI, Coleman-Liau, propaganda patterns, attribution balance, emotional manipulation, weasel/hedge/peacock terms, passive voice, lexical diversity (TTR, Hapax, entropy)")
+      ),
+      computing && React.createElement("div", { style: { textAlign: "center", padding: "18px", color: "#8b7355" } }, "Computing 7 sub-analyses…"),
+      result && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: "18px" } },
+
+        // ── 11A: Readability ──
+        React.createElement("div", null,
+          React.createElement("h4", { style: { margin: "0 0 8px 0", color: "#5c4033", fontSize: "14px", borderBottom: "1px solid #e8d5c4", paddingBottom: "4px" } }, "11A: Readability Metrics"),
+          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "8px", fontSize: "13px" } },
+            [
+              ["Flesch Ease", result.readability.fleschEase, "/100"],
+              ["Flesch-Kincaid", result.readability.fleschKincaid, "grade"],
+              ["Gunning Fog", result.readability.fog, "grade"],
+              ["SMOG", result.readability.smog, "grade"],
+              ["ARI", result.readability.ari, "grade"],
+              ["Coleman-Liau", result.readability.colemanLiau, "grade"],
+              ["Consensus", result.readability.consensus, "grade"],
+            ].map(([label, val, unit]) =>
+              React.createElement("div", { key: label, style: { background: "#faf6f1", padding: "8px", borderRadius: "4px" } },
+                React.createElement("div", { style: { fontSize: "11px", color: "#8b7355" } }, label),
+                React.createElement("div", { style: { fontWeight: 600 } }, val, " ", React.createElement("span", { style: { fontSize: "11px", color: "#a39d97" } }, unit))
+              )
+            )
+          ),
+          React.createElement("div", { style: { marginTop: "8px", fontSize: "12px" } },
+            React.createElement("span", { style: { background: "#f4e8d9", padding: "2px 8px", borderRadius: "3px" } },
+              "Reading Level: ", React.createElement("b", null, result.readability.label)),
+            React.createElement("span", { style: { marginLeft: "12px", color: "#8b7355" } },
+              result.readability.numWords + " words · " + result.readability.numSentences + " sentences · Avg " + result.readability.ASL + " words/sent · " + result.readability.complexWords + " complex words (" + (result.readability.complexWords / result.readability.numWords * 100).toFixed(1) + "%)")
+          ),
+          // Readability bar chart
+          React.createElement("svg", { viewBox: "0 0 500 100", style: { width: "100%", maxWidth: "500px", marginTop: "8px" } },
+            [
+              ["FK", result.readability.fleschKincaid, "#a0522d"],
+              ["Fog", result.readability.fog, "#8b6914"],
+              ["SMOG", result.readability.smog, "#556b2f"],
+              ["ARI", result.readability.ari, "#4682b4"],
+              ["C-L", result.readability.colemanLiau, "#6a5acd"],
+            ].map(([label, val, color], i) => {
+              const y = 5 + i * 18;
+              const w = Math.min(450, Math.max(5, val / 20 * 450));
+              return React.createElement("g", { key: label },
+                React.createElement("text", { x: 0, y: y + 13, fontSize: "11", fill: "#5c4033" }, label),
+                React.createElement("rect", { x: 35, y: y + 2, width: w, height: 14, fill: color, rx: 2, opacity: 0.7 }),
+                React.createElement("text", { x: 40 + w, y: y + 13, fontSize: "10", fill: "#5c4033" }, val)
+              );
+            })
+          )
+        ),
+
+        // ── 11B: Propaganda ──
+        React.createElement("div", null,
+          React.createElement("h4", { style: { margin: "0 0 8px 0", color: "#5c4033", fontSize: "14px", borderBottom: "1px solid #e8d5c4", paddingBottom: "4px" } }, "11B: Propaganda & Rhetorical Techniques"),
+          React.createElement("div", { style: { display: "flex", gap: "12px", flexWrap: "wrap", fontSize: "12px", marginBottom: "8px" } },
+            React.createElement("span", { style: { background: "#f4e8d9", padding: "2px 8px", borderRadius: "3px" } }, "Total hits: ", React.createElement("b", null, result.propaganda.totalHits)),
+            React.createElement("span", { style: { background: "#f4e8d9", padding: "2px 8px", borderRadius: "3px" } }, "Score: ", React.createElement("b", null, result.propaganda.score)),
+            React.createElement("span", { style: { background: result.propaganda.score > 0.15 ? "#ffe0d0" : "#e0f0e0", padding: "2px 8px", borderRadius: "3px" } }, result.propaganda.label)
+          ),
+          Object.keys(result.propaganda.techniques).length > 0 && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "6px", fontSize: "12px" } },
+            ...Object.entries(result.propaganda.techniques).sort((a, b) => b[1].count - a[1].count).map(([name, data]) =>
+              React.createElement("div", { key: name, style: { background: "#faf6f1", padding: "6px 8px", borderRadius: "4px", borderLeft: "3px solid " + (data.weight > 0.9 ? "#c0392b" : data.weight > 0.6 ? "#e67e22" : "#8b7355") } },
+                React.createElement("div", { style: { fontWeight: 600, fontSize: "12px" } }, name, " ", React.createElement("span", { style: { fontWeight: 400, color: "#a0522d" } }, "×" + data.count)),
+                React.createElement("div", { style: { fontSize: "11px", color: "#8b7355", fontStyle: "italic" } }, data.desc)
+              )
+            )
+          ),
+          Object.keys(result.propaganda.techniques).length === 0 && React.createElement("div", { style: { fontSize: "12px", color: "#8b7355" } }, "No propaganda techniques detected.")
+        ),
+
+        // ── 11C: Attribution Balance ──
+        React.createElement("div", null,
+          React.createElement("h4", { style: { margin: "0 0 8px 0", color: "#5c4033", fontSize: "14px", borderBottom: "1px solid #e8d5c4", paddingBottom: "4px" } }, "11C: Attribution & Source Balance"),
+          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "8px", fontSize: "13px" } },
+            [
+              ["Direct Quotes", result.attribution.directQuotes],
+              ["Attribution Verbs", result.attribution.attributionVerbs],
+              ["Named Sources", result.attribution.namedSources],
+              ["Unique Sources", result.attribution.uniqueSources],
+            ].map(([label, val]) =>
+              React.createElement("div", { key: label, style: { background: "#faf6f1", padding: "6px 8px", borderRadius: "4px" } },
+                React.createElement("div", { style: { fontSize: "11px", color: "#8b7355" } }, label),
+                React.createElement("div", { style: { fontWeight: 600 } }, val)
+              )
+            )
+          ),
+          // Gender pronoun bar
+          React.createElement("div", { style: { marginTop: "10px", fontSize: "12px" } },
+            React.createElement("div", { style: { marginBottom: "4px", color: "#5c4033" } }, "Gendered Pronoun Distribution: ", React.createElement("span", { style: { background: "#f4e8d9", padding: "1px 6px", borderRadius: "3px" } }, result.attribution.label)),
+            React.createElement("div", { style: { display: "flex", height: "20px", borderRadius: "4px", overflow: "hidden", background: "#eee" } },
+              result.attribution.malePercent > 0 && React.createElement("div", { style: { width: result.attribution.malePercent + "%", background: "#4682b4", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "10px", minWidth: result.attribution.malePercent > 8 ? "auto" : "0" } }, result.attribution.malePercent > 8 ? "He/Him " + result.attribution.malePercent + "%" : ""),
+              result.attribution.femalePercent > 0 && React.createElement("div", { style: { width: result.attribution.femalePercent + "%", background: "#c0392b", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "10px", minWidth: result.attribution.femalePercent > 8 ? "auto" : "0" } }, result.attribution.femalePercent > 8 ? "She/Her " + result.attribution.femalePercent + "%" : ""),
+              result.attribution.neutralPercent > 0 && React.createElement("div", { style: { width: result.attribution.neutralPercent + "%", background: "#8b7355", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "10px", minWidth: result.attribution.neutralPercent > 8 ? "auto" : "0" } }, result.attribution.neutralPercent > 8 ? "They " + result.attribution.neutralPercent + "%" : "")
+            )
+          )
+        ),
+
+        // ── 11D: Emotional Manipulation ──
+        React.createElement("div", null,
+          React.createElement("h4", { style: { margin: "0 0 8px 0", color: "#5c4033", fontSize: "14px", borderBottom: "1px solid #e8d5c4", paddingBottom: "4px" } }, "11D: Emotional Manipulation"),
+          React.createElement("div", { style: { display: "flex", gap: "12px", flexWrap: "wrap", fontSize: "12px", marginBottom: "8px" } },
+            React.createElement("span", { style: { background: "#f4e8d9", padding: "2px 8px", borderRadius: "3px" } }, "Dominant: ", React.createElement("b", null, result.emotional.dominantEmotion)),
+            React.createElement("span", { style: { background: result.emotional.manipulationScore > 0.15 ? "#ffe0d0" : "#e0f0e0", padding: "2px 8px", borderRadius: "3px" } }, result.emotional.label),
+            React.createElement("span", { style: { color: "#8b7355" } }, "Score: " + result.emotional.manipulationScore)
+          ),
+          // Emotion bars
+          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr", gap: "4px" } },
+            ...Object.entries(result.emotional.emotions).map(([emotion, data]) => {
+              const colors = { fear: "#8e44ad", anger: "#c0392b", hope: "#27ae60", pride: "#2980b9" };
+              const maxW = Math.max(...Object.values(result.emotional.emotions).map(d => d.count), 1);
+              return React.createElement("div", { key: emotion, style: { display: "flex", alignItems: "center", gap: "8px", fontSize: "12px" } },
+                React.createElement("span", { style: { width: "50px", textAlign: "right", textTransform: "capitalize", color: "#5c4033" } }, emotion),
+                React.createElement("div", { style: { flex: 1, height: "16px", background: "#f2dfce", borderRadius: "3px", overflow: "hidden" } },
+                  React.createElement("div", { style: { width: (data.count / maxW * 100) + "%", height: "100%", background: colors[emotion] || "#8b7355", borderRadius: "3px", minWidth: data.count > 0 ? "4px" : "0" } })
+                ),
+                React.createElement("span", { style: { width: "60px", fontSize: "11px", color: "#8b7355" } }, data.count + " (" + data.density + "/1k)")
+              );
+            })
+          )
+        ),
+
+        // ── 11E: Weasel Words ──
+        React.createElement("div", null,
+          React.createElement("h4", { style: { margin: "0 0 8px 0", color: "#5c4033", fontSize: "14px", borderBottom: "1px solid #e8d5c4", paddingBottom: "4px" } }, "11E: Weasel Words, Hedging & Peacock Terms"),
+          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", fontSize: "13px" } },
+            [
+              ["Weasel Words", result.weasel.weaselCount, result.weasel.weaselPer1k, "#c0392b"],
+              ["Hedge Words", result.weasel.hedgeCount, result.weasel.hedgePer1k, "#e67e22"],
+              ["Peacock Terms", result.weasel.peacockCount, result.weasel.peacockPer1k, "#8e44ad"],
+            ].map(([label, count, per1k, color]) =>
+              React.createElement("div", { key: label, style: { background: "#faf6f1", padding: "8px", borderRadius: "4px", borderLeft: "3px solid " + color } },
+                React.createElement("div", { style: { fontSize: "11px", color: "#8b7355" } }, label),
+                React.createElement("div", { style: { fontWeight: 600, color } }, count, React.createElement("span", { style: { fontWeight: 400, fontSize: "11px", color: "#8b7355" } }, " (" + per1k + "/1k words)"))
+              )
+            )
+          ),
+          React.createElement("div", { style: { marginTop: "6px", fontSize: "12px" } },
+            React.createElement("span", { style: { background: result.weasel.totalPer1k > 15 ? "#ffe0d0" : "#e0f0e0", padding: "2px 8px", borderRadius: "3px" } }, result.weasel.label),
+            React.createElement("span", { style: { marginLeft: "8px", color: "#8b7355" } }, "Total: " + result.weasel.total + " (" + result.weasel.totalPer1k + "/1k words)")
+          ),
+          result.weasel.weaselExamples.length > 0 && React.createElement("div", { style: { marginTop: "8px" } },
+            React.createElement("div", { style: { fontSize: "11px", color: "#8b7355", marginBottom: "4px" } }, "Weasel word examples:"),
+            ...result.weasel.weaselExamples.slice(0, 3).map((ex, i) =>
+              React.createElement("div", { key: i, style: { fontSize: "11px", background: "#fff8f0", padding: "3px 6px", marginBottom: "2px", borderRadius: "3px", borderLeft: "2px solid #c0392b" } },
+                React.createElement("b", null, ex.match), " — ", ex.context)
+            )
+          ),
+          result.weasel.peacockExamples.length > 0 && React.createElement("div", { style: { marginTop: "6px" } },
+            React.createElement("div", { style: { fontSize: "11px", color: "#8b7355", marginBottom: "4px" } }, "Peacock term examples:"),
+            ...result.weasel.peacockExamples.slice(0, 3).map((ex, i) =>
+              React.createElement("div", { key: i, style: { fontSize: "11px", background: "#f8f0ff", padding: "3px 6px", marginBottom: "2px", borderRadius: "3px", borderLeft: "2px solid #8e44ad" } },
+                React.createElement("b", null, ex.match), " — ", ex.context)
+            )
+          )
+        ),
+
+        // ── 11F: Passive Voice ──
+        React.createElement("div", null,
+          React.createElement("h4", { style: { margin: "0 0 8px 0", color: "#5c4033", fontSize: "14px", borderBottom: "1px solid #e8d5c4", paddingBottom: "4px" } }, "11F: Passive Voice Analysis"),
+          React.createElement("div", { style: { display: "flex", gap: "12px", flexWrap: "wrap", fontSize: "12px" } },
+            React.createElement("span", { style: { background: "#f4e8d9", padding: "2px 8px", borderRadius: "3px" } }, "Passive: ", React.createElement("b", null, result.passive.passiveCount + "/" + result.passive.totalSentences), " sentences (" + result.passive.percent + "%)"),
+            React.createElement("span", { style: { background: result.passive.percent > 25 ? "#ffe0d0" : "#e0f0e0", padding: "2px 8px", borderRadius: "3px" } }, result.passive.label)
+          ),
+          React.createElement("div", { style: { marginTop: "6px", height: "14px", background: "#f2dfce", borderRadius: "3px", overflow: "hidden" } },
+            React.createElement("div", { style: { width: Math.min(100, result.passive.percent) + "%", height: "100%", background: result.passive.percent > 30 ? "#c0392b" : result.passive.percent > 20 ? "#e67e22" : "#27ae60", borderRadius: "3px" } })
+          )
+        ),
+
+        // ── 11G: Lexical Diversity ──
+        React.createElement("div", null,
+          React.createElement("h4", { style: { margin: "0 0 8px 0", color: "#5c4033", fontSize: "14px", borderBottom: "1px solid #e8d5c4", paddingBottom: "4px" } }, "11G: Lexical Diversity & Density"),
+          React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "8px", fontSize: "13px" } },
+            [
+              ["Tokens", result.lexical.tokens, ""],
+              ["Types (unique)", result.lexical.types, ""],
+              ["TTR", result.lexical.ttr, ""],
+              ["Root TTR", result.lexical.rootTTR, "(Guiraud)"],
+              ["Herdan's C", result.lexical.herdanC, "(Log TTR)"],
+              ["Hapax Legomena", result.lexical.hapaxes, ""],
+              ["Dis Legomena", result.lexical.disLegomena, ""],
+              ["Hapax Ratio", result.lexical.hapaxRatio, "(hapax/N)"],
+              ["Lexical Density", result.lexical.lexicalDensity + "%", ""],
+              ["Shannon Entropy", result.lexical.entropy, "bits"],
+              ["Norm. Entropy", result.lexical.normalizedEntropy, ""],
+            ].map(([label, val, unit]) =>
+              React.createElement("div", { key: label, style: { background: "#faf6f1", padding: "6px 8px", borderRadius: "4px" } },
+                React.createElement("div", { style: { fontSize: "11px", color: "#8b7355" } }, label),
+                React.createElement("div", { style: { fontWeight: 600 } }, val, unit && React.createElement("span", { style: { fontWeight: 400, fontSize: "10px", color: "#a39d97", marginLeft: "3px" } }, unit))
+              )
+            )
+          ),
+          React.createElement("div", { style: { marginTop: "6px", display: "flex", gap: "8px", fontSize: "12px" } },
+            React.createElement("span", { style: { background: "#f4e8d9", padding: "2px 8px", borderRadius: "3px" } }, "Diversity: ", React.createElement("b", null, result.lexical.diversityLabel)),
+            React.createElement("span", { style: { background: "#f4e8d9", padding: "2px 8px", borderRadius: "3px" } }, "Density: ", React.createElement("b", null, result.lexical.densityLabel))
+          )
+        )
+      )
+  );
+}
+
+function SourceBiasSection({ sb, topSources, allClassified, allUnclassified, archiveBookUrls }) {
   const [showAll, setShowAll] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const [resolved, setResolved] = useState(null); // null = not yet, [] = done
+  const [resolveProgress, setResolveProgress] = useState("");
   const totalDomains = allClassified.length + allUnclassified.length;
+  const abCount = archiveBookUrls.length;
+
+  const handleResolve = useCallback(async () => {
+    setResolving(true);
+    setResolveProgress("Resolving 0/" + abCount + "...");
+    try {
+      const results = await resolveArchiveBookSources(archiveBookUrls, (done, total) => {
+        setResolveProgress("Resolving " + done + "/" + total + "...");
+      });
+      setResolved(results);
+    } catch (e) {
+      console.error("Resolve failed:", e);
+      setResolved([]);
+    }
+    setResolving(false);
+    setResolveProgress("");
+  }, [archiveBookUrls, abCount]);
+
   return (
     <Section title="Source Bias Profile">
       <p className="desc">Cited domains mapped to AllSides media bias ratings. Scale: -2 (Left) to +2 (Right).</p>
@@ -1211,6 +2384,55 @@ function SourceBiasSection({ sb, topSources, allClassified, allUnclassified }) {
         <Stat label="Unique Domains" value={totalDomains} />
       </div>
       <BiasSpectrum mean={sb.mean} dist={sb.dist} />
+
+      {/* Resolve archive/book sources button */}
+      {abCount > 0 && !resolved && (
+        <div style={{background:"#f6f1eb",border:"1px solid #e8d5c4",padding:"12px 16px",display:"flex",alignItems:"center",gap:"12px",flexWrap:"wrap"}}>
+          <span style={{fontSize:"13px",color:"#66605c",flex:1}}>
+            <strong>{abCount}</strong> reference{abCount!==1?"s":""} point to Archive.org or Google Books. These are rated <em>Center</em> by default.
+          </span>
+          <button onClick={handleResolve} disabled={resolving} className="btn-primary" style={{padding:"8px 18px",fontSize:"13px",whiteSpace:"nowrap"}}>
+            {resolving ? resolveProgress : "\uD83D\uDD0D Resolve original sources"}
+          </button>
+        </div>
+      )}
+
+      {/* Resolved results */}
+      {resolved && resolved.length > 0 && (
+        <div style={{background:"#f0f7f0",border:"1px solid #b8d4b8",padding:"12px 16px"}}>
+          <div className="small-title" style={{marginBottom:"8px",color:"#2e6b2e"}}>
+            Resolved Archive & Book Sources ({resolved.length})
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:"4px",maxHeight:"300px",overflowY:"auto"}}>
+            {resolved.map((r, i) => (
+              <div key={i} className="source-row">
+                <div className="source-dot" style={{ backgroundColor: r.rating !== null ? BIAS_COLORS[String(r.rating)] : "#e2e8f0" }} />
+                <span className="source-domain">{r.isBook ? "\uD83D\uDCDA " : ""}{r.source}</span>
+                <span className="source-rating" style={{color: r.rating !== null ? undefined : "#94a3b8", fontSize:"11px"}}>
+                  {r.rating !== null ? BIAS_LABELS[String(r.rating)] : "Not rated"}
+                </span>
+                <span style={{fontSize:"11px",color:"#94a3b8",marginLeft:"4px"}}>via {r.resolvedFrom}</span>
+              </div>
+            ))}
+          </div>
+          {(() => {
+            const rated = resolved.filter(r => r.rating !== null);
+            if (rated.length === 0) return null;
+            const avg = rated.reduce((s, r) => s + r.rating, 0) / rated.length;
+            const lbl = BIAS_LABELS[String(Math.max(-2, Math.min(2, Math.round(avg))))] || "Mixed";
+            return (
+              <div style={{marginTop:"10px",fontSize:"13px",color:"#4a4643",borderTop:"1px solid #b8d4b8",paddingTop:"8px"}}>
+                Resolved sources average: <strong>{avg > 0 ? "+" : ""}{avg.toFixed(2)}</strong> ({lbl}) — {rated.length} rated out of {resolved.length} resolved
+              </div>
+            );
+          })()}
+        </div>
+      )}
+      {resolved && resolved.length === 0 && (
+        <div style={{background:"#faf5f0",border:"1px solid #e8d5c4",padding:"10px 16px",fontSize:"13px",color:"#66605c",fontStyle:"italic"}}>
+          No archive or book sources could be resolved. The APIs may be unavailable or the items lack publisher metadata.
+        </div>
+      )}
 
       {!showAll && topSources.length > 0 && (
         <div>
@@ -1376,7 +2598,8 @@ function ReferencesSection() {
     { category: "Media Bias Databases", items: [
       { name: "AllSides Media Bias Ratings v11", detail: "Community-sourced and editorially reviewed media bias ratings on a 5-point Left-to-Right scale for 1,400+ sources.", url: "https://www.allsides.com/media-bias/ratings" },
       { name: "Media Bias/Fact Check (MBFC)", detail: "Independent media bias database with factual reporting assessments, used as supplementary classification source.", url: "https://mediabiasfactcheck.com/" },
-      { name: "Custom Institutional Classification", detail: "Hand-coded ratings for 23 archival and reference domains (JSTOR, PubMed, Internet Archive, etc.) classified as Center (0).", url: null },
+      { name: "Custom Institutional Classification", detail: "Hand-coded ratings for 23 archival and reference domains (JSTOR, PubMed, Internet Archive, etc.) classified as Center (0) by default.", url: null },
+      { name: "Archive & Book Source Resolution", detail: "Optional: click 'Resolve original sources' to look up the actual publisher or original domain behind Archive.org items, Google Books, and Wayback Machine URLs via their respective APIs.", url: null },
     ]},
     { category: "Wikipedia Policy & Style Guides", items: [
       { name: "WP:WEASEL", detail: "Wikipedia Manual of Style guidance on weasel words — vague phrases that create an impression of authority without attribution.", url: "https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch#Unsupported_attributions" },
@@ -1403,6 +2626,30 @@ function ReferencesSection() {
       { name: "OpenAI API", detail: "GPT models used for qualitative bias analysis when user provides an OpenAI API key (sk-...).", url: "https://platform.openai.com/" },
       { name: "Anthropic Claude API", detail: "Claude models used for qualitative bias analysis when user provides an Anthropic API key (sk-ant-...).", url: "https://www.anthropic.com/api" },
       { name: "Groq API", detail: "Fast inference endpoint for open models, used for qualitative bias analysis when user provides a Groq API key (gsk_...).", url: "https://groq.com/" },
+    ]},
+    { category: "Semantic & Political Analysis (Module 10)", items: [
+      { name: "Church, K.W. (2017)", detail: "Word2Vec. Natural Language Engineering, 23(1), 155–162. Foundational reference for embedding-based cosine similarity.", url: "https://doi.org/10.1017/S1351324916000334" },
+      { name: "España-Bonet, C. (2023)", detail: "Political leaning classification using fine-tuned RoBERTa on ~360K newspaper articles. Our lexicon classifier approximates this methodology deterministically.", url: null },
+      { name: "Savitzky, A. & Golay, M.J.E. (1964)", detail: "Smoothing and Differentiation of Data by Simplified Least Squares Procedures. Analytical Chemistry, 36(8), 1627–1639.", url: "https://doi.org/10.1021/ac60214a047" },
+      { name: "Wang, Y. et al. (2013)", detail: "Theoretical Analysis of NDCG Ranking Measures. Proceedings of the 26th Annual Conference on Learning Theory (COLT).", url: null },
+      { name: "Weinreich, H. et al. (2008)", detail: "Not Quite the Average: An Empirical Study of Web Use. ACM TOIT. Finding that users read ~18% of page words, motivating positional bias analysis.", url: "https://doi.org/10.1145/1326561.1326566" },
+      { name: "Hartigan, J.A. & Hartigan, P.M. (1985)", detail: "The Dip Test of Unimodality. Annals of Statistics, 13(1), 70–84. Referenced for bimodality assessment via excess kurtosis.", url: null },
+      { name: "TF-IDF Cosine Similarity", detail: "Client-side TF-IDF vectorization with augmented term frequency and cosine similarity for section-level semantic comparison. No API key required.", url: null },
+    ]},
+    { category: "Advanced Bias Metrics (Module 11)", items: [
+      { name: "Flesch, R. (1948)", detail: "A New Readability Yardstick. Journal of Applied Psychology, 32(3), 221–233. Basis for Flesch Reading Ease score.", url: "https://doi.org/10.1037/h0057532" },
+      { name: "Kincaid, J.P. et al. (1975)", detail: "Derivation of New Readability Formulas for Navy Enlisted Personnel. Research Branch Report 8-75. Flesch-Kincaid Grade Level and ARI formulas.", url: null },
+      { name: "Gunning, R. (1952)", detail: "The Technique of Clear Writing. McGraw-Hill. Gunning Fog Index for readability assessment.", url: null },
+      { name: "McLaughlin, G.H. (1969)", detail: "SMOG Grading: A New Readability Formula. Journal of Reading, 12(8), 639–646.", url: null },
+      { name: "Coleman, M. & Liau, T.L. (1975)", detail: "A Computer Readability Formula Designed for Machine Scoring. Journal of Applied Psychology, 60(2), 283–284.", url: "https://doi.org/10.1037/h0076540" },
+      { name: "Menzner, T. & Leidner, J.L. (2024)", detail: "BiasScanner: Automatic Detection and Classification of News Bias to Strengthen Democracy. Identifies 27 bias types at sentence level. Our propaganda detector implements pattern-based approximations.", url: "https://arxiv.org/abs/2407.10829" },
+      { name: "Da San Martino, G. et al. (2019)", detail: "Fine-Grained Analysis of Propaganda in News Articles. EMNLP 2019. Defines 18 propaganda techniques used as basis for our rhetorical pattern detection.", url: null },
+      { name: "Recasens, M. et al. (2013)", detail: "Linguistic Models for Analyzing and Detecting Biased Language. Stanford NLP. Features: hedges, factives, assertives, implicatives for bias detection.", url: "https://nlp.stanford.edu/pubs/neutrality.pdf" },
+      { name: "Hyland, K. (2005)", detail: "Metadiscourse: Exploring Interaction in Writing. Continuum. Hedge word taxonomy referenced for weasel/hedge detection.", url: null },
+      { name: "Wikipedia:Manual of Style", detail: "Weasel words (WP:WEASEL) and Peacock terms (WP:PEACOCK) guidelines. Lists of vague attribution and promotional language patterns.", url: "https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style/Words_to_watch" },
+      { name: "Guiraud, P. (1960)", detail: "Problèmes et méthodes de la statistique linguistique. Root TTR (V/√N) for length-normalized lexical diversity.", url: null },
+      { name: "Herdan, G. (1960)", detail: "Type-Token Mathematics. Mouton. Herdan's C (log V / log N) for logarithmic lexical diversity measurement.", url: null },
+      { name: "Shannon, C.E. (1948)", detail: "A Mathematical Theory of Communication. Bell System Technical Journal. Shannon entropy applied to vocabulary distribution analysis.", url: null },
     ]},
   ];
 
@@ -1533,36 +2780,16 @@ function WikiBiasAnalyzer() {
 
       const safe = (label, fn) => { try { const r = fn(); console.log("[WBA] " + label + " OK"); return r; } catch(e) { console.error("[WBA] " + label + " FAILED:", e); return null; } };
 
-      setProgress("[1/9] Analyzing source bias profile...");
-      await new Promise(r => setTimeout(r, 50));
-      const sourceBias = safe("sourceBias", () => analyzeSourceBias(wikitext)) || { mean: null, label: "Error", classified: {}, unclassified: {}, totalC: 0, totalU: 0, dist: {"-2":0,"-1":0,"0":0,"1":0,"2":0}, total: 0 };
+      setProgress("Running all analyses...");
+      await new Promise(r => setTimeout(r, 20)); // single yield to show "Running..."
 
-      setProgress("[2/9] Checking Wikipedia policy compliance...");
-      await new Promise(r => setTimeout(r, 50));
+      const sourceBias = safe("sourceBias", () => analyzeSourceBias(wikitext)) || { mean: null, label: "Error", classified: {}, unclassified: {}, totalC: 0, totalU: 0, dist: {"-2":0,"-1":0,"0":0,"1":0,"2":0}, total: 0, archiveBookUrls: [] };
       const policy = safe("policy", () => analyzePolicyCompliance(plainText)) || { weasel: {count:0,density:0,examples:[]}, peacock: {count:0,density:0,examples:[]}, editorial: {count:0,density:0,examples:[]}, total: {count:0,density:0} };
-
-      setProgress("[3/9] Running VADER sentiment analysis...");
-      await new Promise(r => setTimeout(r, 50));
       const sentiment = safe("sentiment", () => analyzeSentiment(sections)) || { mean: 0, posPct: 0, negPct: 0, neuPct: 0, leadBodyGap: 0, sections: {}, bestPos: {text:"",score:0}, bestNeg: {text:"",score:0} };
-
-      setProgress("[4/9] Analyzing structural balance...");
-      await new Promise(r => setTimeout(r, 50));
       const structure = safe("structure", () => analyzeStructure(sections, wikitext)) || { sections: 0, totalWords: 0, gini: 0, largest: {name:"",pct:0}, sectionSizes: {}, hasCriticism: false, hasReception: false, refTotal: 0, refDensity: 0 };
-
-      setProgress("[5/9] Running lexical analysis...");
-      await new Promise(r => setTimeout(r, 50));
       const lexical = safe("lexical", () => analyzeLexical(plainText)) || { wordCount: 0, ttr: 0, hapaxRatio: 0, hedging: {count:0,density:0}, intensifiers: {count:0,density:0}, superlatives: {count:0,density:0}, passive: {count:0,density:0} };
-
-      setProgress("[6/9] Entman framing analysis...");
-      await new Promise(r => setTimeout(r, 50));
       const entman = safe("entman", () => analyzeEntmanFraming(plainText)) || { score: 0, leftScore: 0, rightScore: 0, details: {left:{problem:0,causal:0,moral:0,solution:0},right:{problem:0,causal:0,moral:0,solution:0}}, label: "N/A" };
-
-      setProgress("[7/8] Van Dijk ideological analysis...");
-      await new Promise(r => setTimeout(r, 50));
       const vanDijk = safe("vanDijk", () => analyzeVanDijk(plainText)) || { score: 0, polarization: 0, usPositive: 0, usNegative: 0, themPositive: 0, themNegative: 0, totalMarkers: 0, label: "N/A" };
-
-      setProgress("[8/8] Fairclough discourse analysis...");
-      await new Promise(r => setTimeout(r, 50));
       const fairclough = safe("fairclough", () => analyzeFairlough(plainText)) || { score: 0, passiveRatio: 0, nomRatio: 0, modalityBalance: 0, presupCount: 0, evalDensity: 0, highCertaintyCount: 0, lowCertaintyCount: 0, passiveCount: 0, nomCount: 0, evalCount: 0, label: "N/A" };
 
       console.log("[WBA] All analyses complete, rendering results...");
@@ -1710,7 +2937,7 @@ function WikiBiasAnalyzer() {
       <FrameworkScoreTable results={r} />
 
       {/* Module 1: Source Bias */}
-      <SourceBiasSection sb={sb} topSources={topSources} allClassified={allClassified} allUnclassified={allUnclassified} />
+      <SourceBiasSection sb={sb} topSources={topSources} allClassified={allClassified} allUnclassified={allUnclassified} archiveBookUrls={sb.archiveBookUrls || []} />
 
       {/* Module 2: Policy Compliance */}
       <PolicySection policy={r.policy} sections={r.sections} />
@@ -1870,12 +3097,18 @@ function WikiBiasAnalyzer() {
       {/* Module 9: LLM Analysis */}
       <LLMAnalysisSection plainText={r.plainText} title={r.title} />
 
+      {/* Module 10: Semantic Similarity & Political Leaning */}
+      <SemanticPoliticalSection sections={r.sections} plainText={r.plainText} />
+
+      {/* Module 11: Advanced Bias Metrics */}
+      <AdvancedBiasMetricsSection plainText={r.plainText} />
+
       {/* References */}
       <ReferencesSection />
 
       {/* Footer */}
       <div className="footer">
-        <p>Modules 1-8 are deterministic and rule-based. Same article always produces identical results.</p>
+        <p>Modules 1-8, 10, and 11 are deterministic and rule-based. Same article always produces identical results.</p>
       </div>
     </div>
   );
