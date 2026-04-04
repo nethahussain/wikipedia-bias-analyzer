@@ -128,12 +128,47 @@ window.onerror = function(msg, src, line, col, err) {
   .small-title { font-size: 13px; font-weight: 600; color: #33302e; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.03em; }
   .tags-row { display: flex; gap: 12px; margin-top: 12px; }
 
+  /* Navigation bar */
+  .nav-bar { position: sticky; top: 0; z-index: 100; background: #fff; border-bottom: 1px solid #e8d5c4; padding: 0; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+  .nav-bar::-webkit-scrollbar { height: 0; }
+  .nav-inner { display: flex; gap: 0; min-width: max-content; }
+  .nav-btn { padding: 10px 14px; border: none; background: none; cursor: pointer; font-size: 12px; font-family: 'Source Sans 3', sans-serif; color: #66605c; border-bottom: 2px solid transparent; transition: all 0.15s; flex-shrink: 0; white-space: nowrap; }
+  .nav-btn:hover { color: #33302e; background: #fff9f5; }
+  .nav-btn.active { color: #990f3d; border-bottom-color: #990f3d; font-weight: 600; }
+
+  /* Overall dashboard */
+  .dashboard { background: #fff; border-top: 4px solid #990f3d; padding: 20px; }
+  .dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-top: 12px; }
+  .dash-item { text-align: center; padding: 12px 8px; background: #faf7f3; border-radius: 2px; }
+  .dash-score { font-size: 20px; font-weight: 700; font-family: 'Playfair Display', serif; }
+  .dash-label { font-size: 10px; color: #66605c; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 4px; }
+  .dash-sub { font-size: 10px; color: #a39d97; }
+  .overall-ring { display: flex; align-items: center; justify-content: center; }
+
+  /* Wikipedia links */
+  .wp-links { display: flex; gap: 8px; margin-top: 6px; }
+  .wp-link { font-size: 12px; color: #0d7680; text-decoration: none; padding: 3px 10px; border: 1px solid #d4e8e8; background: #f5fbf8; transition: all 0.15s; }
+  .wp-link:hover { background: #e8f5f0; border-color: #0d7680; }
+
+  /* Print */
+  @media print {
+    .nav-bar, .btn-secondary, .btn-primary, .wp-links, .no-print { display: none !important; }
+    body { background: #fff; font-size: 11pt; }
+    .container { max-width: 100%; padding: 0; gap: 8px; }
+    .card { border-top: 2px solid #990f3d; page-break-inside: avoid; }
+    .section-body { padding: 10px 14px; }
+    .dashboard { padding: 12px; }
+  }
+
   @media (max-width: 640px) {
     .stats-4 { grid-template-columns: repeat(2, 1fr); }
     .stats-5 { grid-template-columns: repeat(3, 1fr); }
     .metric-label { width: 100px; }
     .sent-name { width: 100px; }
     .section-prop-name { width: 100px; }
+    .nav-btn { padding: 8px 10px; font-size: 11px; }
+    .dash-grid { grid-template-columns: repeat(3, 1fr); }
+    .header-bar { flex-direction: column; align-items: flex-start; gap: 8px; }
   }
 </style>
 </head>
@@ -2124,6 +2159,305 @@ function analyzeLexicalMetrics(plainText) {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// MODULE 12: CITATION QUALITY ANALYSIS
+// ═══════════════════════════════════════════════════════════════════
+
+function analyzeCitationQuality(wikitext) {
+  // Extract years from references
+  const refRegex = /<ref[^>]*>[\s\S]*?<\/ref>/gi;
+  const refs = wikitext.match(refRegex) || [];
+  const yearRegex = /\b(19[5-9]\d|20[0-2]\d)\b/g;
+  const refYears = [];
+  const currentYear = new Date().getFullYear();
+
+  refs.forEach(ref => {
+    const years = ref.match(yearRegex);
+    if (years) {
+      const y = parseInt(years[years.length - 1]); // take last year found (usually pub year)
+      if (y >= 1950 && y <= currentYear) refYears.push(y);
+    }
+  });
+
+  // Year distribution
+  const yearDist = {};
+  refYears.forEach(y => { yearDist[y] = (yearDist[y] || 0) + 1; });
+  const sortedYears = [...refYears].sort((a, b) => a - b);
+  const medianYear = sortedYears.length > 0 ? sortedYears[Math.floor(sortedYears.length / 2)] : null;
+  const meanYear = refYears.length > 0 ? Math.round(refYears.reduce((a, b) => a + b, 0) / refYears.length) : null;
+
+  // Age brackets
+  const ages = refYears.map(y => currentYear - y);
+  const recent = ages.filter(a => a <= 5).length;
+  const medium = ages.filter(a => a > 5 && a <= 15).length;
+  const old = ages.filter(a => a > 15 && a <= 30).length;
+  const veryOld = ages.filter(a => a > 30).length;
+
+  // Count dead links (archive.org usage as proxy)
+  const archiveLinks = (wikitext.match(/web\.archive\.org/gi) || []).length;
+  const deadLinkTemplates = (wikitext.match(/\{\{dead link/gi) || []).length;
+
+  // Self-citations (links back to Wikipedia)
+  const wikiSelfLinks = (wikitext.match(/https?:\/\/en\.wikipedia\.org/gi) || []).length;
+
+  // Access dates (indicator of online source verification)
+  const accessDates = (wikitext.match(/access-?date|accessdate|retrieved/gi) || []).length;
+
+  // ISBN count (books as sources)
+  const isbns = (wikitext.match(/ISBN\s+[\d-X]+/gi) || []).length;
+
+  // DOI count (academic papers)
+  const dois = (wikitext.match(/doi\s*=\s*[^\s|}]+/gi) || []).length;
+
+  // PMID count (medical literature)
+  const pmids = (wikitext.match(/pmid\s*=\s*\d+/gi) || []).length;
+
+  const totalRefs = refs.length;
+  const datedRefs = refYears.length;
+  const undatedRefs = totalRefs - datedRefs;
+
+  // Decade distribution for chart
+  const decades = {};
+  refYears.forEach(y => {
+    const dec = Math.floor(y / 10) * 10 + "s";
+    decades[dec] = (decades[dec] || 0) + 1;
+  });
+
+  // Freshness score (0-1, higher = fresher sources)
+  const freshnessScore = refYears.length > 0 ? Math.min(1, recent / refYears.length * 1.5) : 0;
+
+  // Academic score (0-1)
+  const academicScore = totalRefs > 0 ? Math.min(1, (dois + pmids + isbns) / totalRefs * 2) : 0;
+
+  return {
+    totalRefs, datedRefs, undatedRefs,
+    medianYear, meanYear, refYears: sortedYears,
+    recent, medium, old, veryOld,
+    archiveLinks, deadLinkTemplates, wikiSelfLinks,
+    accessDates, isbns, dois, pmids,
+    decades, freshnessScore, academicScore,
+    label: freshnessScore > 0.6 ? "Well-maintained sources" : freshnessScore > 0.3 ? "Mixed recency" : refYears.length === 0 ? "No dated refs" : "Aging sources"
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// OVERALL BIAS DASHBOARD COMPONENT
+// ═══════════════════════════════════════════════════════════════════
+
+function OverallDashboard({ r }) {
+  // Compute overall bias indicators
+  const policyScore = r.policy.total.density || 0; // flagged words per 1k
+  const sentimentBias = Math.abs(r.sentiment.mean);
+  const sourceBias = r.sourceBias.mean !== null ? Math.abs(r.sourceBias.mean) : 0;
+  const framingBias = Math.abs(r.entman.score);
+  const polarization = Math.abs(r.vanDijk.score);
+  const cdaScore = Math.abs(r.fairclough.score);
+  const structGini = r.structure.gini;
+
+  // Normalize all to 0-100 scale
+  const scores = [
+    { label: "Source Bias", raw: sourceBias, norm: Math.min(100, sourceBias * 50), color: sourceBias < 0.5 ? "#4a7c59" : sourceBias < 1 ? "#c49a2a" : "#b94a3e" },
+    { label: "NPOV Flags", raw: policyScore, norm: Math.min(100, policyScore * 5), color: policyScore < 5 ? "#4a7c59" : policyScore < 15 ? "#c49a2a" : "#b94a3e" },
+    { label: "Sentiment", raw: sentimentBias, norm: Math.min(100, sentimentBias * 200), color: sentimentBias < 0.1 ? "#4a7c59" : sentimentBias < 0.3 ? "#c49a2a" : "#b94a3e" },
+    { label: "Structure", raw: structGini, norm: Math.min(100, structGini * 100), color: structGini < 0.4 ? "#4a7c59" : structGini < 0.6 ? "#c49a2a" : "#b94a3e" },
+    { label: "Framing", raw: framingBias, norm: Math.min(100, framingBias * 200), color: framingBias < 0.1 ? "#4a7c59" : framingBias < 0.3 ? "#c49a2a" : "#b94a3e" },
+    { label: "Polarization", raw: polarization, norm: Math.min(100, polarization * 200), color: polarization < 0.1 ? "#4a7c59" : polarization < 0.3 ? "#c49a2a" : "#b94a3e" },
+  ];
+
+  // Overall score (average of normalized)
+  const overall = Math.round(scores.reduce((s, x) => s + x.norm, 0) / scores.length);
+  const overallColor = overall < 20 ? "#4a7c59" : overall < 40 ? "#6a8a4a" : overall < 60 ? "#c49a2a" : "#b94a3e";
+  const overallLabel = overall < 20 ? "Low bias detected" : overall < 40 ? "Some bias indicators" : overall < 60 ? "Moderate bias concerns" : "Significant bias detected";
+
+  return (
+    <div className="dashboard" id="mod-dashboard">
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"16px"}}>
+        <div>
+          <div style={{fontSize:"14px",fontWeight:700,color:"#33302e",fontFamily:"'Playfair Display', serif",textTransform:"uppercase",letterSpacing:"0.04em"}}>Overall Bias Assessment</div>
+          <div style={{fontSize:"12px",color:"#66605c",marginTop:"2px"}}>{overallLabel}</div>
+        </div>
+        <div className="overall-ring">
+          <svg viewBox="0 0 80 80" width="72" height="72">
+            <circle cx="40" cy="40" r="34" fill="none" stroke="#f2dfce" strokeWidth="6" />
+            <circle cx="40" cy="40" r="34" fill="none" stroke={overallColor} strokeWidth="6"
+              strokeDasharray={`${overall * 2.136} 213.6`} strokeLinecap="butt"
+              transform="rotate(-90 40 40)" style={{transition:"stroke-dasharray 0.8s"}} />
+            <text x="40" y="40" textAnchor="middle" dominantBaseline="central"
+              style={{fontSize:"18px",fontWeight:700,fontFamily:"'Playfair Display', serif",fill:overallColor}}>{overall}</text>
+          </svg>
+        </div>
+      </div>
+      <div className="dash-grid">
+        {scores.map(s => (
+          <div key={s.label} className="dash-item">
+            <div className="dash-score" style={{color:s.color}}>{Math.round(s.norm)}</div>
+            <div className="dash-label">{s.label}</div>
+          </div>
+        ))}
+        <div className="dash-item">
+          <div className="dash-score" style={{color:"#33302e"}}>{r.structure.refTotal}</div>
+          <div className="dash-label">References</div>
+        </div>
+        <div className="dash-item">
+          <div className="dash-score" style={{color:"#33302e"}}>{r.structure.refDensity}</div>
+          <div className="dash-label">Refs/1k words</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CITATION QUALITY COMPONENT (Module 12)
+// ═══════════════════════════════════════════════════════════════════
+
+function CitationQualitySection({ wikitext }) {
+  const [result, setResult] = useState(null);
+  const [computing, setComputing] = useState(false);
+
+  const run = () => {
+    setComputing(true);
+    setTimeout(() => {
+      try { setResult(analyzeCitationQuality(wikitext)); }
+      catch(e) { setResult({ error: e.message }); }
+      setComputing(false);
+    }, 20);
+  };
+
+  return (
+    <div id="mod-12">
+    <Section title="Module 12: Citation Quality & Recency" defaultOpen={false}>
+      {!result && !computing && (
+        <div style={{textAlign:"center",padding:"14px"}}>
+          <button onClick={run} style={{background:"#0d7680",color:"#fff",border:"none",padding:"10px 28px",fontSize:"14px",cursor:"pointer",fontWeight:600}}>
+            Analyze Citation Quality
+          </button>
+          <div style={{fontSize:"12px",color:"#66605c",marginTop:"8px"}}>
+            Source recency, academic indicators (DOI, PMID, ISBN), dead links, decade distribution. No API key needed.
+          </div>
+        </div>
+      )}
+      {computing && <div style={{textAlign:"center",padding:"14px",color:"#66605c"}}>Analyzing citations…</div>}
+      {result && !result.error && (
+        <div style={{display:"flex",flexDirection:"column",gap:"16px"}}>
+          <div className="stats-grid stats-4">
+            <Stat label="Total Refs" value={result.totalRefs} />
+            <Stat label="Dated Refs" value={result.datedRefs} sub={result.undatedRefs + " undated"} />
+            <Stat label="Median Year" value={result.medianYear || "N/A"} />
+            <Stat label="Freshness" value={(result.freshnessScore * 100).toFixed(0) + "%"} sub={result.label} />
+          </div>
+
+          <div>
+            <div className="small-title">Source Recency</div>
+            <div style={{display:"flex",gap:"6px",height:"32px",marginTop:"4px"}}>
+              {result.recent > 0 && <div style={{flex:result.recent,background:"#4a7c59",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"11px",fontWeight:600}}>
+                {result.recent} recent
+              </div>}
+              {result.medium > 0 && <div style={{flex:result.medium,background:"#6a8a4a",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"11px",fontWeight:600}}>
+                {result.medium} mid
+              </div>}
+              {result.old > 0 && <div style={{flex:result.old,background:"#c49a2a",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"11px",fontWeight:600}}>
+                {result.old} old
+              </div>}
+              {result.veryOld > 0 && <div style={{flex:result.veryOld,background:"#b94a3e",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"11px",fontWeight:600}}>
+                {result.veryOld} legacy
+              </div>}
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:"10px",color:"#a39d97",marginTop:"2px"}}>
+              <span>≤5 years</span><span>6-15 years</span><span>16-30 years</span><span>30+ years</span>
+            </div>
+          </div>
+
+          <div className="stats-grid stats-4">
+            <Stat label="DOIs" value={result.dois} sub="Academic papers" />
+            <Stat label="PMIDs" value={result.pmids} sub="Medical lit." />
+            <Stat label="ISBNs" value={result.isbns} sub="Books" />
+            <Stat label="Academic Score" value={(result.academicScore * 100).toFixed(0) + "%"} />
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(100px, 1fr))",gap:"6px",fontSize:"12px"}}>
+            <div style={{background:"#faf7f3",padding:"8px",textAlign:"center"}}>
+              <div style={{fontWeight:600}}>{result.archiveLinks}</div>
+              <div style={{color:"#66605c",fontSize:"10px"}}>Archive.org</div>
+            </div>
+            <div style={{background:"#faf7f3",padding:"8px",textAlign:"center"}}>
+              <div style={{fontWeight:600,color:result.deadLinkTemplates > 0 ? "#b94a3e" : "#33302e"}}>{result.deadLinkTemplates}</div>
+              <div style={{color:"#66605c",fontSize:"10px"}}>Dead links</div>
+            </div>
+            <div style={{background:"#faf7f3",padding:"8px",textAlign:"center"}}>
+              <div style={{fontWeight:600,color:result.wikiSelfLinks > 0 ? "#c49a2a" : "#33302e"}}>{result.wikiSelfLinks}</div>
+              <div style={{color:"#66605c",fontSize:"10px"}}>Self-citations</div>
+            </div>
+            <div style={{background:"#faf7f3",padding:"8px",textAlign:"center"}}>
+              <div style={{fontWeight:600}}>{result.accessDates}</div>
+              <div style={{color:"#66605c",fontSize:"10px"}}>Access dates</div>
+            </div>
+          </div>
+
+          {Object.keys(result.decades).length > 0 && (
+            <div>
+              <div className="small-title">Decade Distribution</div>
+              <div style={{display:"flex",gap:"3px",height:"80px",alignItems:"flex-end",marginTop:"4px"}}>
+                {Object.entries(result.decades).sort((a,b) => a[0].localeCompare(b[0])).map(([dec, count]) => {
+                  const maxCount = Math.max(...Object.values(result.decades));
+                  return (
+                    <div key={dec} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
+                      <div style={{fontSize:"10px",color:"#66605c",fontWeight:600}}>{count}</div>
+                      <div style={{width:"100%",background:"#0d7680",height:Math.max(4, count/maxCount*60)+"px",opacity:0.8}} />
+                      <div style={{fontSize:"9px",color:"#a39d97"}}>{dec}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {result && result.error && <p style={{color:"#b94a3e"}}>Error: {result.error}</p>}
+    </Section>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODULE NAVIGATION BAR
+// ═══════════════════════════════════════════════════════════════════
+
+function ModuleNav() {
+  const modules = [
+    { id: "mod-dashboard", label: "Dashboard" },
+    { id: "mod-1", label: "Sources" },
+    { id: "mod-2", label: "NPOV" },
+    { id: "mod-3", label: "Sentiment" },
+    { id: "mod-4", label: "Structure" },
+    { id: "mod-5", label: "Lexical" },
+    { id: "mod-6", label: "Entman" },
+    { id: "mod-7", label: "Van Dijk" },
+    { id: "mod-8", label: "Fairclough" },
+    { id: "mod-9", label: "LLM" },
+    { id: "mod-10", label: "Semantic" },
+    { id: "mod-11", label: "Advanced" },
+    { id: "mod-12", label: "Citations" },
+  ];
+
+  const scrollTo = (id) => {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  return (
+    <div className="nav-bar no-print">
+      <div className="nav-inner">
+        {modules.map(m => (
+          <button key={m.id} className="nav-btn" onClick={() => scrollTo(m.id)}>
+            {m.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Module 11 React Component ──
 function AdvancedBiasMetricsSection({ plainText }) {
   const [result, setResult] = useState(null);
@@ -2651,6 +2985,11 @@ function ReferencesSection() {
       { name: "Herdan, G. (1960)", detail: "Type-Token Mathematics. Mouton. Herdan's C (log V / log N) for logarithmic lexical diversity measurement.", url: null },
       { name: "Shannon, C.E. (1948)", detail: "A Mathematical Theory of Communication. Bell System Technical Journal. Shannon entropy applied to vocabulary distribution analysis.", url: null },
     ]},
+    { category: "Citation Quality Analysis (Module 12)", items: [
+      { name: "Reference Year Extraction", detail: "Regex-based year extraction from <ref> tags to determine source recency and age distribution.", url: null },
+      { name: "Academic Source Indicators", detail: "DOI, PMID, and ISBN detection as proxies for peer-reviewed, medical, and book sources respectively.", url: null },
+      { name: "Dead Link Detection", detail: "Detection of {{dead link}} templates and archive.org usage as indicators of link rot and source preservation.", url: null },
+    ]},
   ];
 
   return (
@@ -2793,7 +3132,7 @@ function WikiBiasAnalyzer() {
       const fairclough = safe("fairclough", () => analyzeFairlough(plainText)) || { score: 0, passiveRatio: 0, nomRatio: 0, modalityBalance: 0, presupCount: 0, evalDensity: 0, highCertaintyCount: 0, lowCertaintyCount: 0, passiveCount: 0, nomCount: 0, evalCount: 0, label: "N/A" };
 
       console.log("[WBA] All analyses complete, rendering results...");
-      setResults({ sourceBias, policy, sentiment, structure, lexical, entman, vanDijk, fairclough, wordCount, sectionCount: Object.keys(sections).length, title: actualTitle, sections, plainText });
+      setResults({ sourceBias, policy, sentiment, structure, lexical, entman, vanDijk, fairclough, wordCount, sectionCount: Object.keys(sections).length, title: actualTitle, sections, plainText, wikitext });
     } catch (e) {
       setResults({ error: e.message });
     }
@@ -2921,9 +3260,18 @@ function WikiBiasAnalyzer() {
         <div>
           <div className="header-title">{r.title}</div>
           <div className="header-sub">{r.wordCount.toLocaleString()} words &middot; {r.sectionCount} sections</div>
+          <div className="wp-links">
+            <a className="wp-link" href={`https://en.wikipedia.org/wiki/${encodeURIComponent(r.title)}`} target="_blank" rel="noopener noreferrer">View on Wikipedia</a>
+            <a className="wp-link" href={`https://en.wikipedia.org/w/index.php?title=${encodeURIComponent(r.title)}&action=edit`} target="_blank" rel="noopener noreferrer">Edit</a>
+            <a className="wp-link" href={`https://en.wikipedia.org/w/index.php?title=${encodeURIComponent(r.title)}&action=history`} target="_blank" rel="noopener noreferrer">History</a>
+            <a className="wp-link no-print" href="#" onClick={(e) => { e.preventDefault(); window.print(); }}>Print Report</a>
+          </div>
         </div>
-        <button className="btn-secondary" onClick={() => { setResults(null); setQuery(""); }}>New Analysis</button>
+        <button className="btn-secondary no-print" onClick={() => { setResults(null); setQuery(""); }}>New Analysis</button>
       </div>
+
+      {/* Navigation */}
+      <ModuleNav />
 
       {/* Redirect notice */}
       {redirectInfo && (
@@ -2933,16 +3281,25 @@ function WikiBiasAnalyzer() {
         </div>
       )}
 
+      {/* Overall Bias Dashboard */}
+      <OverallDashboard r={r} />
+
       {/* Multi-Framework Scoring Table */}
       <FrameworkScoreTable results={r} />
 
       {/* Module 1: Source Bias */}
+      <div id="mod-1">
       <SourceBiasSection sb={sb} topSources={topSources} allClassified={allClassified} allUnclassified={allUnclassified} archiveBookUrls={sb.archiveBookUrls || []} />
+      </div>
 
       {/* Module 2: Policy Compliance */}
+      <div id="mod-2">
       <PolicySection policy={r.policy} sections={r.sections} />
 
+      </div>
+
       {/* Module 3: Sentiment */}
+      <div id="mod-3">
       <Section title="Sentiment Asymmetry (VADER)">
         <p className="desc">VADER rule-based sentiment (<a href="https://github.com/cjhutto/vaderSentiment" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Hutto &amp; Gilbert 2014</a>). Deterministic lexicon of ~1,200 scored words. Scale: -1.0 to +1.0. <a href="https://ojs.aaai.org/index.php/ICWSM/article/view/14550" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Paper</a></p>
         <div className="stats-grid stats-5">
@@ -2969,8 +3326,10 @@ function WikiBiasAnalyzer() {
           </div>
         )}
       </Section>
+      </div>
 
       {/* Module 4: Structure */}
+      <div id="mod-4">
       <Section title="Structural Balance">
         <p className="desc">Section sizes, citation distribution, and <a href="https://en.wikipedia.org/wiki/Gini_coefficient" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Gini coefficient</a> for structural evenness. Reference density per <a href="https://en.wikipedia.org/wiki/Wikipedia:Verifiability" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:V</a>.</p>
         <div className="stats-grid stats-4">
@@ -3003,8 +3362,10 @@ function WikiBiasAnalyzer() {
           </span>
         </div>
       </Section>
+      </div>
 
       {/* Module 5: Lexical */}
+      <div id="mod-5">
       <Section title="Lexical Analysis">
         <p className="desc">Vocabulary diversity (<a href="https://en.wikipedia.org/wiki/Lexical_density" target="_blank" rel="noopener" style={{color:"#0d7680"}}>TTR</a>, <a href="https://en.wikipedia.org/wiki/Hapax_legomenon" target="_blank" rel="noopener" style={{color:"#0d7680"}}>hapax ratio</a>), passive voice, hedging, intensifiers, and superlatives. Word lists from <a href="https://en.wikipedia.org/wiki/Wikipedia:Manual_of_Style" target="_blank" rel="noopener" style={{color:"#0d7680"}}>WP:MOS</a>.</p>
         <div className="stats-grid stats-4">
@@ -3018,8 +3379,10 @@ function WikiBiasAnalyzer() {
         <MetricBar label="Superlatives" value={r.lexical.superlatives?.density || 0} max={10} color="#f59e0b" suffix="/1k" />
         <MetricBar label="Passive Voice" value={r.lexical.passive?.density || 0} max={30} color="#64748b" suffix="/1k" />
       </Section>
+      </div>
 
       {/* Module 6: Entman Framing */}
+      <div id="mod-6">
       <Section title="Entman Framing Analysis" defaultOpen={false}>
         <p className="desc"><a href="https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1460-2466.1993.tb01304.x" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Entman (1993)</a>: Identifies problem/causal/moral/solution frames associated with left vs right political discourse. Score: {r.entman.score > 0 ? "+" : ""}{r.entman.score} ({r.entman.label})</p>
         <div className="stats-grid stats-4">
@@ -3045,8 +3408,10 @@ function WikiBiasAnalyzer() {
           </div>
         </div>
       </Section>
+      </div>
 
       {/* Module 7: Van Dijk */}
+      <div id="mod-7">
       <Section title="Van Dijk Ideological Square" defaultOpen={false}>
         <p className="desc"><a href="https://en.wikipedia.org/wiki/Teun_A._van_Dijk" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Van Dijk (1998)</a>: Measures Us/Them polarization by tracking positive/negative descriptors applied to in-group vs out-group references.</p>
         <div className="stats-grid stats-4">
@@ -3074,8 +3439,10 @@ function WikiBiasAnalyzer() {
           </div>
         </div>
       </Section>
+      </div>
 
       {/* Module 8: Fairclough CDA */}
+      <div id="mod-8">
       <Section title="Fairclough Critical Discourse Analysis" defaultOpen={false}>
         <p className="desc"><a href="https://en.wikipedia.org/wiki/Critical_discourse_analysis" target="_blank" rel="noopener" style={{color:"#0d7680"}}>Fairclough (1995)</a>: Analyzes how linguistic choices construct power and ideology. Higher scores = more ideologically loaded language.</p>
         <div className="stats-grid stats-4">
@@ -3093,22 +3460,34 @@ function WikiBiasAnalyzer() {
           ({r.fairclough.modalityBalance > 0 ? "assertive" : r.fairclough.modalityBalance < 0 ? "hedged" : "balanced"} discourse)
         </div>
       </Section>
+      </div>
 
       {/* Module 9: LLM Analysis */}
+      <div id="mod-9">
       <LLMAnalysisSection plainText={r.plainText} title={r.title} />
+      </div>
 
       {/* Module 10: Semantic Similarity & Political Leaning */}
+      <div id="mod-10">
       <SemanticPoliticalSection sections={r.sections} plainText={r.plainText} />
+      </div>
 
       {/* Module 11: Advanced Bias Metrics */}
+      <div id="mod-11">
       <AdvancedBiasMetricsSection plainText={r.plainText} />
+      </div>
+
+      {/* Module 12: Citation Quality */}
+      <CitationQualitySection wikitext={r.wikitext} />
 
       {/* References */}
       <ReferencesSection />
 
       {/* Footer */}
       <div className="footer">
-        <p>Modules 1-8, 10, and 11 are deterministic and rule-based. Same article always produces identical results.</p>
+        <p>Modules 1-8, 10-12 are deterministic and rule-based. Same article always produces identical results.</p>
+        <p style={{marginTop:"4px"}}>Module 9 requires an API key. Modules 10-12 run on-demand (click to compute).</p>
+        <p style={{marginTop:"8px"}}><a href="https://github.com/nethahussain/wikipedia-bias-analyzer" target="_blank" rel="noopener" style={{color:"#0d7680",textDecoration:"none"}}>Source code on GitHub</a> &middot; CC0 Public Domain</p>
       </div>
     </div>
   );
