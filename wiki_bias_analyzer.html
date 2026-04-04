@@ -2015,10 +2015,10 @@ function analyzeAttribution(plainText) {
 
 // ── 11D: Emotional Manipulation Score ──
 const EMOTION_LEXICON = {
-  fear: ["afraid","alarm","anxiety","anxious","apprehension","concern","crisis","danger","dread","emergency","fear","frightened","horrified","insecure","menace","nightmare","panic","paranoia","peril","risk","scared","terror","terrified","terrorize","threat","threatened","unsafe","vulnerable","worry","worrying"],
-  anger: ["anger","angry","appalled","betray","betrayed","contempt","corrupt","disgrace","disgusted","enraged","frustrated","fury","hate","hatred","hostile","indignant","infuriated","injustice","offended","outraged","resentful","revenge","revolted","vengeful","wrathful"],
-  hope: ["aspire","bright","encourage","faith","hope","hopeful","inspire","optimism","optimistic","possibility","promise","promising","prospect","uplifting","vision","visionary"],
-  pride: ["achievement","accomplished","glory","great","greatest","historic","legacy","magnificent","national pride","patriotic","proud","remarkable","success","triumph","triumphant","victorious","victory"],
+  fear: ["afraid","alarm","alarming","anxiety","anxious","apprehension","catastrophe","catastrophic","concern","crisis","danger","dangerous","deadly","devastating","devastation","dread","dreadful","emergency","fear","frightened","frightening","horrified","horrific","horrifying","insecure","menace","nightmare","panic","paranoia","peril","risk","scared","terror","terrible","terrified","terrifying","terrorize","threat","threatened","threatening","unsafe","vulnerable","worry","worrying"],
+  anger: ["anger","angry","appalled","appalling","betray","betrayed","contempt","corrupt","corruption","deplorable","despicable","disgrace","disgraceful","disgusted","disgusting","enraged","frustrated","fury","hate","hatred","hostile","indignant","infuriated","injustice","offended","outraged","outrageous","resentful","revenge","revolted","revolting","shameful","vengeful","wrathful"],
+  hope: ["aspire","bright","encourage","encouraging","faith","hope","hopeful","inspire","inspiring","optimism","optimistic","possibility","promise","promising","prospect","uplifting","vision","visionary"],
+  pride: ["achievement","accomplished","glory","glorious","great","greatest","heroic","historic","legacy","magnificent","national pride","patriotic","proud","remarkable","success","successful","triumph","triumphant","victorious","victory"],
 };
 
 function analyzeEmotionalManipulation(plainText) {
@@ -2248,7 +2248,7 @@ function analyzeCitationQuality(wikitext) {
   const accessDates = (wikitext.match(/access-?date|accessdate|retrieved/gi) || []).length;
 
   // ISBN count (books as sources)
-  const isbns = (wikitext.match(/ISBN\s+[\d-X]+/gi) || []).length;
+  const isbns = (wikitext.match(/ISBN[\s=]+[\d-X]+/gi) || []).length;
 
   // DOI count (academic papers)
   const dois = (wikitext.match(/doi\s*=\s*[^\s|}]+/gi) || []).length;
