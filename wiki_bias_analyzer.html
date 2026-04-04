@@ -777,6 +777,23 @@ function splitSentences(text) {
   return text.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 10);
 }
 
+// Check if a sentence looks like actual prose vs leftover markup/data
+function isProse(s) {
+  if (!s || s.length < 15) return false;
+  // Skip if mostly pipe-separated (table data)
+  if ((s.match(/\|/g) || []).length >= 3) return false;
+  // Skip if contains align=, style=, rowspan=, etc.
+  if (/(?:align|style|rowspan|colspan|bgcolor|width|height|scope|valign)\s*=/i.test(s)) return false;
+  // Skip if mostly numbers/special chars (data rows)
+  const letters = (s.match(/[a-zA-Z]/g) || []).length;
+  if (letters / s.length < 0.4) return false;
+  // Skip if starts with {{ or [[ or contains raw wikitext markers
+  if (/^\s*[\{\[\|!#\*]/.test(s)) return false;
+  // Skip if it looks like a citation/ref fragment
+  if (/^\s*(doi|pmid|isbn|url|title|journal|publisher|access-?date)\s*=/i.test(s)) return false;
+  return true;
+}
+
 function analyzeSentiment(sections) {
   const allScores = [];
   const sectionData = {};
@@ -788,8 +805,8 @@ function analyzeSentiment(sections) {
     const scores = sents.map(s => vaderScore(s));
     scores.forEach((sc, i) => {
       allScores.push(sc);
-      if (sc > bestPos.score) bestPos = { text: sents[i].slice(0,120), score: sc, section: name };
-      if (sc < bestNeg.score) bestNeg = { text: sents[i].slice(0,120), score: sc, section: name };
+      if (sc > bestPos.score && isProse(sents[i])) bestPos = { text: sents[i].slice(0,120), score: sc, section: name };
+      if (sc < bestNeg.score && isProse(sents[i])) bestNeg = { text: sents[i].slice(0,120), score: sc, section: name };
     });
     const mean = scores.reduce((a,b)=>a+b,0)/scores.length;
     sectionData[name] = {
@@ -1033,15 +1050,42 @@ function parseWikitext(wikitext) {
 
 function stripWikiMarkup(text) {
   let t = text;
+  // Remove tables (wiki table markup)
+  t = t.replace(/\{\|[\s\S]*?\|\}/g, "");
+  // Remove table rows/cells that survived (lines starting with | or ! or |-)
+  t = t.replace(/^\|\-.*$/gm, "");
+  t = t.replace(/^\|.*$/gm, "");
+  t = t.replace(/^!.*$/gm, "");
+  // Remove File/Image links (keep nothing - these are images/captions)
+  t = t.replace(/\[\[(?:File|Image|Fil|Archivo|Datei|Fichier):[^\]]*\]\]/gi, "");
+  // Remove Category links
+  t = t.replace(/\[\[Category:[^\]]*\]\]/gi, "");
+  // Remove gallery tags
+  t = t.replace(/<gallery[\s\S]*?<\/gallery>/gi, "");
+  // Remove references
   t = t.replace(/<ref[^>]*\/>/g, "");
   t = t.replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, "");
+  // Remove HTML comments
   t = t.replace(/<!--[\s\S]*?-->/g, "");
+  // Remove templates (two passes for nested)
   t = t.replace(/\{\{[^{}]*\}\}/g, "");
   t = t.replace(/\{\{[^{}]*\}\}/g, "");
+  t = t.replace(/\{\{[^{}]*\}\}/g, "");
+  // Remove remaining {{ or }}
+  t = t.replace(/\{\{|\}\}/g, "");
+  // Resolve wikilinks: [[link|display]] → display, [[link]] → link
   t = t.replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, "$1");
+  // Resolve external links: [url text] → text
   t = t.replace(/\[https?:\/\/[^\s\]]+\s*([^\]]*)\]/g, "$1");
+  // Remove bold/italic markup
   t = t.replace(/'{2,3}/g, "");
+  // Remove remaining HTML tags
   t = t.replace(/<[^>]+>/g, "");
+  // Remove lines that look like data/code (align=, style=, class=, rowspan=, colspan=)
+  t = t.replace(/^.*(?:align|style|class|rowspan|colspan|bgcolor|width|height)\s*=.*$/gim, "");
+  // Remove bullet/number list markers at start of line
+  t = t.replace(/^[*#:;]+\s*/gm, "");
+  // Collapse whitespace
   t = t.replace(/\s+/g, " ");
   return t.trim();
 }
